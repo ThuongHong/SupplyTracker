@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import HttpUrl, PostgresDsn, RedisDsn
+from pydantic import HttpUrl, PostgresDsn, RedisDsn, SecretStr
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import EnvSettingsSource
@@ -60,14 +60,14 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     log_level: str = "INFO"
     environment: Literal["development", "staging", "production"] = "development"
-    sync_bearer_token: str = ""
+    sync_bearer_token: SecretStr = SecretStr("")
 
     # PortWatch
     portwatch_base_url: HttpUrl
     portwatch_rate_limit_per_minute: int = 60
 
     # FRED
-    fred_api_key: str = ""
+    fred_api_key: SecretStr = SecretStr("")
     fred_series: list[str] = []
 
     # Freight
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     bunker_fuel_types: list[str] = []
 
     # LLM (DashScope Qwen)
-    dashscope_api_key: str = ""
+    dashscope_api_key: SecretStr = SecretStr("")
     dashscope_base_url: HttpUrl
     qwen_primary_model: str = "qwen-plus"
     qwen_fallback_model: str = "qwen-turbo"

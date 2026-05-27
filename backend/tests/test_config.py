@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings, get_settings
 
@@ -59,3 +60,19 @@ def test_bunker_fields_parsed_from_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.bunker_ports == ["SGSIN", "AEFJR", "NLRTM"]
     assert s.bunker_fuel_types == ["VLSFO", "MGO"]
     get_settings.cache_clear()
+
+
+def test_invalid_environment_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _base_env(monkeypatch)
+    monkeypatch.setenv("ENVIRONMENT", "prod")  # not a valid Literal value
+    get_settings.cache_clear()
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
+def test_missing_required_field_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _base_env(monkeypatch)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    get_settings.cache_clear()
+    with pytest.raises(ValidationError):
+        get_settings()
