@@ -33,7 +33,7 @@ migrate: ## Apply all pending Alembic migrations
 	docker compose exec backend alembic upgrade head
 
 bootstrap: ## Migrate then seed the development database
-	make migrate && docker compose exec backend python -m app.scripts.seed_dev
+	$(MAKE) migrate && docker compose exec backend python -m app.scripts.seed_dev
 
 collect-all: ## Trigger full data collection across all sources
 	docker compose exec backend python -m app.scripts.collect_all

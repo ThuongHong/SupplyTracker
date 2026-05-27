@@ -12,7 +12,6 @@ htmlcov/
 
 # Node
 node_modules/
-dist/
 .vite/
 
 # Docker volumes
