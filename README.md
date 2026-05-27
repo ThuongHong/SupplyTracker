@@ -16,7 +16,7 @@ make up
 | Backend API | http://localhost:8000      |
 | API Docs    | http://localhost:8000/docs |
 | Flower      | http://localhost:5555      |
-| Mailhog     | http://localhost:8025      |
+| Mailpit     | http://localhost:8025      |
 | Postgres    | localhost:5432             |
 | Redis       | localhost:6379             |
 

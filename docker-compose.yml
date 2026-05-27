@@ -47,6 +47,8 @@ services:
       redis:
         condition: service_healthy
 
+  # frontend: no depends_on backend — Vite serves browser-side fetches to host
+  # localhost:8000, not the backend's container DNS name.
   frontend:
     build:
       context: .
@@ -57,7 +59,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
 
   celery-worker:
     build:
@@ -80,12 +82,13 @@ services:
     env_file: .env
     volumes:
       - ./backend:/app/backend
+      - celery_beat_data:/var/lib/celery
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.tasks.celery_app beat -l INFO
+    command: celery -A app.tasks.celery_app beat -l INFO --schedule=/var/lib/celery/celerybeat-schedule
 
   flower:
     build:
@@ -99,12 +102,15 @@ services:
     ports:
       - "5555:5555"
 
-  mailhog:
-    image: mailhog/mailhog:latest
+  mailpit:
+    # Replaces mailhog (abandoned, amd64-only). Same SMTP-on-1025, web UI on 8025.
+    image: axllent/mailpit:latest
     ports:
       - "1025:1025"
       - "8025:8025"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
+  celery_beat_data:

@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.7-slim
 
 # System dependencies for psycopg (libpq), GeoAlchemy2 (geos/proj/gdal), and build tools
 RUN apt-get update \
