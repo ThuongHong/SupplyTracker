@@ -55,7 +55,7 @@ class TestPortWatchHappyPath:
             mock_upsert.return_value = None
             result = collector.collect(session)
 
-        assert result == 2
+        assert result.rows == 2
 
     @respx.mock
     def test_collect_calls_upsert_for_each_row(self) -> None:
@@ -99,7 +99,7 @@ class TestPortWatchIdempotency:
              patch.object(collector, "_upsert_coverage"):
             r2 = collector.collect(session)
 
-        assert r1 == r2 == 2
+        assert r1.rows == r2.rows == 2
 
 
 class TestPortWatch429Backoff:
@@ -118,7 +118,7 @@ class TestPortWatch429Backoff:
              patch.object(collector, "_upsert_coverage"):
             result = collector.collect(session)
 
-        assert result == 2
+        assert result.rows == 2
 
 
 class TestPortWatchPerEntityIsolation:
@@ -143,4 +143,5 @@ class TestPortWatchPerEntityIsolation:
              patch.object(collector, "_upsert_coverage"):
             result = collector.collect(session)
 
-        assert result == 1
+        assert result.rows == 1
+        assert result.errors

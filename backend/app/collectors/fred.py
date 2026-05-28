@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.collectors.base import BaseCollector
+from app.collectors.base import BaseCollector, CollectionResult
 from app.config import get_settings
 from app.db.models import FreightIndex
 
@@ -19,25 +19,27 @@ _FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 class FREDCollector(BaseCollector):
     source_name = "fred"
 
-    def collect(self, session: Session) -> int:
+    def collect(self, session: Session) -> CollectionResult:
         settings = get_settings()
         api_key = settings.fred_api_key.get_secret_value()
         if not api_key:
-            logger.warning("FRED API key is not configured; skipping collection")
-            return 0
+            raise ValueError("FRED API key not configured")
 
         series_list = settings.fred_series
         total = 0
+        errors: list[str] = []
 
         with httpx.Client(timeout=30.0) as client:
             for series_id in series_list:
                 try:
                     total += self._collect_series(session, client, series_id, api_key)
                 except Exception as exc:
-                    logger.warning("FRED series %s failed: %s", series_id, exc)
+                    err_msg = f"FRED series {series_id} failed: {exc}"
+                    logger.warning(err_msg)
+                    errors.append(err_msg)
 
         session.commit()
-        return total
+        return CollectionResult(rows=total, errors=errors)
 
     def _collect_series(
         self,

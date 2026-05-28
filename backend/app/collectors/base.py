@@ -35,10 +35,11 @@ class BaseCollector(ABC):
 
         result = CollectionResult(rows=0)
         try:
-            rows = self.collect(session)
-            result.rows = rows
-            log.rows_collected = rows
+            result = self.collect(session)
+            log.rows_collected = result.rows
             log.status = "success"
+            if result.errors:
+                log.error = "\n".join(result.errors)
         except Exception as exc:
             log.status = "error"
             log.error = str(exc)
@@ -50,7 +51,7 @@ class BaseCollector(ABC):
         return result
 
     @abstractmethod
-    def collect(self, session: Session) -> int:
+    def collect(self, session: Session) -> CollectionResult:
         ...
 
     def _retry_request(
@@ -113,6 +114,7 @@ class BaseCollector(ABC):
         entity_name: str,
         source: str,
         observed_at: datetime,
+        status: str = "success",
     ) -> None:
         now = datetime.now(timezone.utc)
 
@@ -129,7 +131,7 @@ class BaseCollector(ABC):
                 expected_days=0,
                 missing_days=0,
                 freshness_status=_compute_freshness(observed_at, now),
-                last_collection_status="success",
+                last_collection_status=status,
                 updated_at=now,
             )
             .on_conflict_do_update(
@@ -140,7 +142,7 @@ class BaseCollector(ABC):
                     .excluded.latest_observed_at,
                     "observed_rows": DataCoverage.observed_rows + 1,
                     "freshness_status": _compute_freshness(observed_at, now),
-                    "last_collection_status": "success",
+                    "last_collection_status": status,
                     "updated_at": now,
                 },
             )

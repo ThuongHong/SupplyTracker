@@ -39,7 +39,7 @@ class TestFBXHappyPath:
         with patch.object(collector, "_upsert_freight_index") as mock_upsert:
             result = collector.collect(session)
 
-        assert result == 2
+        assert result.rows == 2
         assert mock_upsert.call_count == 2
         call_kwargs = mock_upsert.call_args_list[0][1]
         assert call_kwargs["index_name"] == "FBX_GLOBAL"
@@ -60,7 +60,7 @@ class TestFBXHappyPath:
         with patch.object(collector, "_upsert_freight_index") as mock_upsert:
             result = collector.collect(session)
 
-        assert result == 2
+        assert result.rows == 2
 
 
 class TestFBXEmptyUrl:
@@ -75,5 +75,5 @@ class TestFBXEmptyUrl:
         with respx.mock:
             result = collector.collect(session)
 
-        assert result == 0
+        assert result.rows == 0
         assert not respx.calls

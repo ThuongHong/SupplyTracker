@@ -45,7 +45,7 @@ class TestFREDHappyPath:
             result = collector.collect(session)
 
         assert mock_upsert.call_count == 8
-        assert result == 8
+        assert result.rows == 8
 
     @respx.mock
     def test_skips_dot_values(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,12 +68,12 @@ class TestFREDHappyPath:
         with patch.object(collector, "_upsert_freight_index", side_effect=capture):
             result = collector.collect(session)
 
-        assert result == 4
+        assert result.rows == 4
         assert not any("2024-01-02" in d for d in call_dates)
 
 
 class TestFREDMissingKey:
-    def test_empty_api_key_returns_zero_no_http(
+    def test_empty_api_key_raises_no_http(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("FRED_API_KEY", "")
@@ -86,7 +86,7 @@ class TestFREDMissingKey:
         session = _make_session()
 
         with respx.mock:
-            result = collector.collect(session)
+            with pytest.raises(ValueError, match="FRED API key not configured"):
+                collector.collect(session)
 
-        assert result == 0
         assert not respx.calls

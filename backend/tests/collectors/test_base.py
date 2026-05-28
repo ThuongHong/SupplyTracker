@@ -14,11 +14,14 @@ from app.collectors.base import BaseCollector, CollectionResult, _compute_freshn
 class _ConcreteCollector(BaseCollector):
     source_name = "test_source"
 
-    def __init__(self, rows_to_return: int = 0) -> None:
+    def __init__(self, rows_to_return: int = 0, raise_exc: Exception | None = None) -> None:
         self._rows = rows_to_return
+        self._raise_exc = raise_exc
 
-    def collect(self, session: object) -> int:
-        return self._rows
+    def collect(self, session: object) -> CollectionResult:
+        if self._raise_exc is not None:
+            raise self._raise_exc
+        return CollectionResult(rows=self._rows)
 
 
 class TestRetryRequest:
@@ -159,3 +162,41 @@ class TestUpsertCoverage:
         collector._upsert_coverage(session, "port", "P001", "Test Port", "portwatch", now)
 
         assert existing.missing_days == 0
+
+
+class TestRunMethod:
+    def _make_log_session(self) -> MagicMock:
+        session = MagicMock()
+        session.add.return_value = None
+        session.flush.return_value = None
+        session.commit.return_value = None
+        return session
+
+    def test_run_writes_error_status_when_collect_raises(self) -> None:
+        exc = RuntimeError("fatal collection error")
+        collector = _ConcreteCollector(raise_exc=exc)
+        session = self._make_log_session()
+
+        result = collector.run(session)
+
+        # find the CollectionLog that was added
+        added_obj = session.add.call_args[0][0]
+        assert added_obj.status == "error"
+        assert "fatal collection error" in (added_obj.error or "")
+        assert result.errors
+
+    def test_run_writes_success_status_and_partial_errors_on_success(self) -> None:
+        collector = _ConcreteCollector(rows_to_return=5)
+        # Override collect to return a result with partial errors
+        collector.collect = lambda s: CollectionResult(  # type: ignore[method-assign]
+            rows=5, errors=["entity X failed"]
+        )
+        session = self._make_log_session()
+
+        result = collector.run(session)
+
+        added_obj = session.add.call_args[0][0]
+        assert added_obj.status == "success"
+        assert added_obj.error is not None and "entity X failed" in added_obj.error
+        assert result.rows == 5
+        assert result.errors

@@ -9,7 +9,7 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.collectors.base import BaseCollector
+from app.collectors.base import BaseCollector, CollectionResult
 from app.config import get_settings
 from app.db.models import FreightIndex
 
@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 class WCICollector(BaseCollector):
     source_name = "wci"
 
-    def collect(self, session: Session) -> int:
+    def collect(self, session: Session) -> CollectionResult:
         settings = get_settings()
         source_url = settings.wci_source_url
         if not source_url:
             logger.warning("WCI source URL is not configured; skipping collection")
-            return 0
+            return CollectionResult(rows=0)
 
         with httpx.Client(timeout=30.0) as client:
             resp = self._retry_request(client, "GET", source_url)
@@ -32,7 +32,7 @@ class WCICollector(BaseCollector):
             count = self._parse_and_upsert(session, resp)
 
         session.commit()
-        return count
+        return CollectionResult(rows=count)
 
     def _parse_and_upsert(self, session: Session, resp: httpx.Response) -> int:
         # TODO: update HTML parsing logic once target URL format is confirmed

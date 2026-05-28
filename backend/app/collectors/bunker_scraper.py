@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.collectors.base import BaseCollector
+from app.collectors.base import BaseCollector, CollectionResult
 from app.config import get_settings
 from app.db.models import BunkerPrice
 
@@ -19,28 +19,29 @@ _BUNKER_URL_TEMPLATE = "https://www.bunkerindex.com/prices/{port_code}/{fuel_typ
 class BunkerCollector(BaseCollector):
     source_name = "bunker"
 
-    def collect(self, session: Session) -> int:
+    def collect(self, session: Session) -> CollectionResult:
         settings = get_settings()
         ports = settings.bunker_ports
         fuel_types = settings.bunker_fuel_types
 
         if not ports:
             logger.warning("No bunker ports configured; skipping collection")
-            return 0
+            return CollectionResult(rows=0)
 
         total = 0
+        errors: list[str] = []
         with httpx.Client(timeout=30.0) as client:
             for port_code in ports:
                 for fuel_type in fuel_types:
                     try:
                         total += self._fetch_pair(session, client, port_code, fuel_type)
                     except Exception as exc:
-                        logger.warning(
-                            "Bunker fetch failed for %s/%s: %s", port_code, fuel_type, exc
-                        )
+                        err_msg = f"Bunker fetch failed for {port_code}/{fuel_type}: {exc}"
+                        logger.warning(err_msg)
+                        errors.append(err_msg)
 
         session.commit()
-        return total
+        return CollectionResult(rows=total, errors=errors)
 
     def _fetch_pair(
         self,

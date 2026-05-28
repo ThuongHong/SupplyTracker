@@ -39,7 +39,7 @@ class TestBunkerHappyPath:
         with patch.object(collector, "_upsert_bunker_price") as mock_upsert:
             result = collector.collect(session)
 
-        assert result == 4
+        assert result.rows == 4
         assert mock_upsert.call_count == 4
 
     @respx.mock
@@ -61,7 +61,7 @@ class TestBunkerHappyPath:
         with patch.object(collector, "_upsert_bunker_price") as mock_upsert:
             result = collector.collect(session)
 
-        assert result == 4
+        assert result.rows == 4
         assert mock_upsert.call_count == 4
 
 
@@ -78,7 +78,7 @@ class TestBunkerEmptyPorts:
         with respx.mock:
             result = collector.collect(session)
 
-        assert result == 0
+        assert result.rows == 0
         assert not respx.calls
 
 
@@ -104,5 +104,5 @@ class TestBunkerPerPairIsolation:
         with patch.object(collector, "_upsert_bunker_price") as mock_upsert:
             result = collector.collect(session)
 
-        assert result == 2
+        assert result.rows == 2
         assert mock_upsert.call_count == 2

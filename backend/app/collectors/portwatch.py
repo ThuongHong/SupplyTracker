@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class PortWatchCollector(BaseCollector):
     source_name = "portwatch"
 
-    def collect(self, session: Session) -> int:
+    def collect(self, session: Session) -> CollectionResult:
         settings = get_settings()
         base_url = str(settings.portwatch_base_url).rstrip("/")
 
@@ -47,10 +47,17 @@ class PortWatchCollector(BaseCollector):
         except Exception as exc:
             logger.warning("Chokepoint bootstrap failed: %s", exc)
 
-    def _upsert_ports(self, session: Session, ports_data: list[dict]) -> None:
+    def _upsert_ports(self, session: Session, ports_data: list[dict]) -> list[str]:
+        errors: list[str] = []
         for item in ports_data:
-            lat = item.get("latitude", 0.0)
-            lon = item.get("longitude", 0.0)
+            lat = item.get("latitude") or 0.0
+            lon = item.get("longitude") or 0.0
+            if not lat or not lon:
+                name = item.get("name") or item.get("locode") or "<unknown>"
+                msg = f"Port {name!r} skipped: missing or zero lat/lon ({lat}, {lon})"
+                logger.warning(msg)
+                errors.append(msg)
+                continue
             geom = WKTElement(f"POINT({lon} {lat})", srid=4326)
             locode = item.get("locode")
             conflict_col = "locode" if locode else "name"
@@ -75,6 +82,7 @@ class PortWatchCollector(BaseCollector):
             )
             session.execute(stmt)
         session.flush()
+        return errors
 
     def _upsert_chokepoints(self, session: Session, cp_data: list[dict]) -> None:
         for item in cp_data:
@@ -98,7 +106,7 @@ class PortWatchCollector(BaseCollector):
 
     def _collect_metrics(
         self, session: Session, client: httpx.Client, base_url: str
-    ) -> int:
+    ) -> CollectionResult:
         today = date.today().isoformat()
         resp = self._retry_request(
             client, "GET", f"{base_url}/metrics", params={"date": today}
@@ -109,14 +117,32 @@ class PortWatchCollector(BaseCollector):
         total = 0
         errors: list[str] = []
         for item in rows_data:
+            entity_id = item.get("entity_id", "<unknown>")
+            entity_type = item.get("entity_type", "<unknown>")
+            entity_name = item.get("entity_name", "")
             try:
                 total += self._process_metric_row(session, item, today)
             except Exception as exc:
-                errors.append(str(exc))
+                err_msg = str(exc)
+                errors.append(err_msg)
                 logger.warning("Failed to process metric row %s: %s", item, exc)
+                # Record coverage failure so last_collection_status="error"
+                try:
+                    observed_at = datetime.fromisoformat(today).replace(tzinfo=timezone.utc)
+                    self._upsert_coverage(
+                        session,
+                        entity_type,
+                        entity_id,
+                        entity_name,
+                        "portwatch",
+                        observed_at,
+                        status="error",
+                    )
+                except Exception:
+                    pass
 
         session.commit()
-        return total
+        return CollectionResult(rows=total, errors=errors)
 
     def _process_metric_row(
         self, session: Session, item: dict, date_str: str
