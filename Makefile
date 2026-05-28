@@ -24,19 +24,19 @@ shell-fe: ## Open a sh shell in the frontend container
 	docker compose exec frontend sh
 
 test: ## Run the backend test suite with pytest
-	docker compose exec backend pytest -q
+	docker compose exec -w /app/backend backend pytest -q
 
 lint: ## Run ruff and mypy against the backend
-	docker compose exec backend ruff check . && docker compose exec backend mypy app
+	docker compose exec -w /app/backend backend ruff check . && docker compose exec -w /app/backend backend mypy app
 
 migrate: ## Apply all pending Alembic migrations
-	docker compose exec backend alembic upgrade head
+	docker compose exec -w /app/backend backend alembic upgrade head
 
 bootstrap: ## Migrate then seed the development database
-	$(MAKE) migrate && docker compose exec backend python -m app.scripts.seed_dev
+	$(MAKE) migrate && docker compose exec -w /app/backend backend python -m app.scripts.seed_dev
 
 collect-all: ## Trigger full data collection across all sources
-	docker compose exec backend python -m app.scripts.collect_all
+	docker compose exec -w /app/backend backend python -m app.scripts.collect_all
 
 forecast: ## Run the freight-rate forecast pipeline
-	docker compose exec backend python -m app.scripts.run_forecast
+	docker compose exec -w /app/backend backend python -m app.scripts.run_forecast
