@@ -9,9 +9,10 @@ import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icon
 import { navigate } from '../router'
 import { fetchPort, fetchPortMetrics } from '../api/ports'
 import { fetchRiskForecast } from '../api/risk'
-import { fetchStory } from '../api/story'
 import { tracked } from '../data/tracked'
-import type { PortDetail, RiskForecast, StoryEvent, MetricPoint } from '../api/types'
+import { EventLog } from '../components/EventLog'
+import { SyncButton } from '../components/SyncButton'
+import type { PortDetail, RiskForecast, MetricPoint } from '../api/types'
 
 interface PortDetailViewProps {
   id: string
@@ -183,59 +184,6 @@ function ForecastPanel({ entityType, entityId }: { entityType: string; entityId:
   )
 }
 
-// ─── Event Log ───────────────────────────────────────────────────────────────
-
-function EventLog({ entityId }: { entityId: string }) {
-  const [events, setEvents] = useState<StoryEvent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchStory()
-      .then((res) => {
-        if (cancelled) return
-        const filtered = res.events.filter((e) => !e.entity_id || e.entity_id === entityId)
-        setEvents(filtered)
-        setLoading(false)
-      })
-      .catch((e: Error) => {
-        if (cancelled) return
-        setError(e.message)
-        setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [entityId])
-
-  if (loading) return <DataState status="loading" />
-  if (error) return <DataState status="error" error={error} />
-  if (!events.length) return <DataState status="empty" emptyMessage="No events recorded" />
-
-  return (
-    <div className="space-y-3">
-      {events.map((ev) => (
-        <div
-          key={ev.id}
-          className="flex gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700"
-        >
-          <div className="flex-shrink-0 mt-0.5">
-            <SeverityBadge severity={ev.severity} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{ev.title}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">{ev.narrative}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-              {ev.timestamp ? ev.timestamp.slice(0, 16).replace('T', ' ') : ''}
-            </p>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function PortDetailView({ id }: PortDetailViewProps) {
@@ -339,6 +287,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
             {port.updated_at ? ` · Updated ${port.updated_at.slice(0, 10)}` : ''}
           </p>
         </div>
+        <SyncButton />
         <button
           onClick={toggleTrack}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -400,7 +349,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
 
       {/* Event Log */}
       <Card title="Event Log">
-        <EventLog entityId={id} />
+        <EventLog entityType="port" entityId={id} />
       </Card>
     </div>
   )
