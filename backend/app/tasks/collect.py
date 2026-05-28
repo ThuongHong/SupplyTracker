@@ -52,7 +52,7 @@ def collect_portwatch(self: Any) -> dict[str, Any]:
         from app.collectors.portwatch import PortWatchCollector
         return _run_collector(PortWatchCollector)
     except Exception as exc:
-        logger.exception("collect_portwatch failed: %s", exc)
+        logger.error("collect_portwatch failed, retrying: %s", exc)
         raise self.retry(exc=exc)
 
 
@@ -63,7 +63,7 @@ def collect_fred(self: Any) -> dict[str, Any]:
         from app.collectors.fred import FREDCollector
         return _run_collector(FREDCollector)
     except Exception as exc:
-        logger.exception("collect_fred failed: %s", exc)
+        logger.error("collect_fred failed, retrying: %s", exc)
         raise self.retry(exc=exc)
 
 
@@ -74,7 +74,7 @@ def collect_fbx(self: Any) -> dict[str, Any]:
         from app.collectors.fbx_scraper import FBXCollector
         return _run_collector(FBXCollector)
     except Exception as exc:
-        logger.exception("collect_fbx failed: %s", exc)
+        logger.error("collect_fbx failed, retrying: %s", exc)
         raise self.retry(exc=exc)
 
 
@@ -85,7 +85,7 @@ def collect_wci(self: Any) -> dict[str, Any]:
         from app.collectors.wci_scraper import WCICollector
         return _run_collector(WCICollector)
     except Exception as exc:
-        logger.exception("collect_wci failed: %s", exc)
+        logger.error("collect_wci failed, retrying: %s", exc)
         raise self.retry(exc=exc)
 
 
@@ -96,7 +96,7 @@ def collect_bunker(self: Any) -> dict[str, Any]:
         from app.collectors.bunker_scraper import BunkerCollector
         return _run_collector(BunkerCollector)
     except Exception as exc:
-        logger.exception("collect_bunker failed: %s", exc)
+        logger.error("collect_bunker failed, retrying: %s", exc)
         raise self.retry(exc=exc)
 
 
@@ -125,10 +125,11 @@ def _on_collect_all_done(results: list[dict[str, Any]]) -> dict[str, Any]:
 # ── collect_all chord ─────────────────────────────────────────────────────────
 
 @celery_app.task(name="collect.collect_all")
-def collect_all() -> Any:
+def collect_all() -> str:
     """Launch all collectors in parallel (group) and aggregate via chord callback.
 
-    Returns the AsyncResult of the chord so callers can wait on it if needed.
+    Returns the task ID (str) of the chord so callers can poll status via
+    AsyncResult(id) without serialisation errors in the result backend.
     """
     individual = group(
         collect_portwatch.s(),
@@ -138,4 +139,5 @@ def collect_all() -> Any:
         collect_bunker.s(),
     )
     pipeline = chord(individual, _on_collect_all_done.s())
-    return pipeline.delay()
+    result = pipeline.delay()
+    return result.id

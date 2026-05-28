@@ -171,6 +171,9 @@ def run_pipeline(self: Any) -> dict[str, Any]:
     try:
         # Step 1+2: compute baselines + score entities
         score_result = _step_score_entities(as_of)
+        # snapshots is a list of transient RiskFeatureSnapshot instances built
+        # manually in score_entity() — they were never session.add()-ed, so they
+        # carry no session binding and cannot raise DetachedInstanceError.
         snapshots = score_result["snapshots"]
 
         # Step 3+4: detect events + propagate disruptions
@@ -194,5 +197,5 @@ def run_pipeline(self: Any) -> dict[str, Any]:
         return summary
 
     except Exception as exc:
-        logger.exception("score.run_pipeline failed: %s", exc)
+        logger.error("score.run_pipeline failed, retrying: %s", exc)
         raise self.retry(exc=exc)
