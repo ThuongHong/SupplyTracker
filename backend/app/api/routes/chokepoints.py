@@ -68,7 +68,7 @@ def _bulk_latest_chokepoint_scores(
 
 
 def _chokepoint_entity_id(cp: Chokepoint) -> str:
-    return str(cp.id)
+    return cp.name
 
 
 def _geom_to_polygon_coords(geom: Any) -> list[list[float]] | None:
