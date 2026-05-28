@@ -1,0 +1,40 @@
+schema_version: "1.0"
+severity_thresholds: [0.3, 0.6, 0.8]  # low/elevated/high/critical boundaries
+max_missing_fraction: 0.5  # refuse to score above this
+components:
+  - name: throughput
+    metric: port_calls
+    weight: 0.35
+    baseline_window_days: 30
+    direction: higher_is_better
+    entity_types: [port]
+  - name: dwell_time
+    metric: dwell_hours
+    weight: 0.25
+    baseline_window_days: 30
+    direction: higher_is_worse
+    entity_types: [port]
+  - name: congestion
+    metric: anchored_count
+    weight: 0.20
+    baseline_window_days: 30
+    direction: higher_is_worse
+    entity_types: [port]
+  - name: transit_volume
+    metric: transit_calls
+    weight: 0.40
+    baseline_window_days: 30
+    direction: higher_is_better
+    entity_types: [chokepoint]
+  - name: vessel_density
+    metric: vessel_count
+    weight: 0.35
+    baseline_window_days: 30
+    direction: higher_is_better
+    entity_types: [chokepoint]
+  - name: speed
+    metric: median_speed
+    weight: 0.25
+    baseline_window_days: 30
+    direction: higher_is_better
+    entity_types: [port, chokepoint]
