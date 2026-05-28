@@ -253,3 +253,28 @@ export interface ChatChunk {
   content?: string
   error?: string
 }
+
+// ─── News ──────────────────────────────────────────────────────────────────────
+export interface NewsItem {
+  id: number
+  entity_type: string
+  entity_id: string
+  url: string
+  title: string
+  source: string
+  published_at: string
+  summary: string | null
+  language: string
+  fetched_at: string
+}
+
+export interface NewsListResponse {
+  items: NewsItem[]
+  count: number
+}
+
+// ─── Sync ──────────────────────────────────────────────────────────────────────
+export interface SyncResponse {
+  task_id: string
+  source: string
+}
