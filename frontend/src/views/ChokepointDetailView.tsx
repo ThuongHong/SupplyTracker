@@ -1,18 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card } from '../components/ui/Card'
 import { Badge, SeverityBadge } from '../components/ui/Badge'
 import { DataState } from '../components/ui/DataState'
 import { AreaChart } from '../components/ui/AreaChart'
 import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
+import { WindowPicker } from '../components/ui/WindowPicker'
 import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
 import { navigate } from '../router'
-import { fetchChokepoint, fetchChokepointBreakdown, fetchChokepointMetrics } from '../api/chokepoints'
-import { fetchRiskForecast } from '../api/risk'
+import { fetchChokepoint, fetchChokepointBreakdown } from '../api/chokepoints'
+import { fetchEntityDashboard } from '../api/dashboard'
 import { tracked } from '../data/tracked'
 import { EventLog } from '../components/EventLog'
 import { SyncButton } from '../components/SyncButton'
-import type { ChokepointDetail, RiskForecast, BreakdownDay, MetricPoint } from '../api/types'
+import { VesselCountChart } from '../components/charts/VesselCountChart'
+import { MedianSpeedChart } from '../components/charts/MedianSpeedChart'
+import { RiskForecastChart } from '../components/charts/RiskForecastChart'
+import { IndicesPanel } from '../components/charts/IndicesPanel'
+import type { ChokepointDetail, BreakdownDay, DashboardResponse } from '../api/types'
 
 interface ChokepointDetailViewProps {
   id: string
@@ -51,9 +56,14 @@ function KpiStrip({ cp, latestDay }: { cp: ChokepointDetail; latestDay?: Breakdo
 
 // ─── Breakdown Chart ─────────────────────────────────────────────────────────
 
-function BreakdownChart({ id }: { id: string }) {
+function BreakdownChart({
+  id,
+  onLatestDay,
+}: {
+  id: string
+  onLatestDay?: (day: BreakdownDay) => void
+}) {
   const [days, setDays] = useState<BreakdownDay[]>([])
-  const [latestDay, setLatestDay] = useState<BreakdownDay | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,7 +74,7 @@ function BreakdownChart({ id }: { id: string }) {
         if (cancelled) return
         const slice = bd.days.slice(-50)
         setDays(slice)
-        setLatestDay(slice[slice.length - 1])
+        if (slice.length && onLatestDay) onLatestDay(slice[slice.length - 1])
         setLoading(false)
       })
       .catch((e: Error) => {
@@ -75,7 +85,7 @@ function BreakdownChart({ id }: { id: string }) {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <DataState status="loading" />
   if (error) return <DataState status="error" error={error} />
@@ -89,139 +99,6 @@ function BreakdownChart({ id }: { id: string }) {
   return <AreaChart data={chartData} height={180} />
 }
 
-// ─── Metric Drill-down ────────────────────────────────────────────────────────
-
-function MetricDrilldown({ cpId }: { cpId: number }) {
-  const [allMetrics, setAllMetrics] = useState<Record<string, MetricPoint[]>>({})
-  const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState('')
-
-  useEffect(() => {
-    let cancelled = false
-    fetchChokepointMetrics(cpId)
-      .then((res) => {
-        if (cancelled) return
-        setAllMetrics(res.metrics)
-        const keys = Object.keys(res.metrics)
-        if (keys.length && !selected) setSelected(keys[0])
-        setLoading(false)
-      })
-      .catch(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [cpId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const keys = Object.keys(allMetrics)
-
-  const chartData = useMemo(() => {
-    const pts = allMetrics[selected] ?? []
-    return pts.map((p) => ({ label: p.time.slice(0, 10), value: p.value }))
-  }, [selected, allMetrics])
-
-  const currentVal = useMemo(() => {
-    const pts = allMetrics[selected] ?? []
-    return pts.length ? pts[pts.length - 1].value : null
-  }, [selected, allMetrics])
-
-  if (loading) return <DataState status="loading" />
-  if (!keys.length) {
-    return <DataState status="empty" emptyMessage="No metric data available" />
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 flex-wrap">
-        <label
-          htmlFor="cp-metric-picker"
-          className="text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Metric
-        </label>
-        <select
-          id="cp-metric-picker"
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          className="text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          {keys.map((k) => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-        {currentVal !== null && (
-          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Latest: {currentVal.toFixed(2)}
-          </span>
-        )}
-      </div>
-      {chartData.length > 0 && (
-        <AreaChart
-          data={chartData}
-          height={180}
-          series={[{ key: 'value', name: selected, color: '#6366f1', fillOpacity: 0.15 }]}
-          showLegend
-        />
-      )}
-    </div>
-  )
-}
-
-// ─── Forecast Panel ──────────────────────────────────────────────────────────
-
-function ForecastPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const [forecast, setForecast] = useState<RiskForecast | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchRiskForecast(entityType, entityId)
-      .then((f) => {
-        if (cancelled) return
-        setForecast(f)
-        setLoading(false)
-      })
-      .catch((e: Error) => {
-        if (cancelled) return
-        setError(e.message)
-        setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [entityType, entityId])
-
-  if (loading) return <DataState status="loading" />
-  if (error || !forecast || !forecast.points.length) {
-    return (
-      <div className="py-6 text-center">
-        <Badge variant="moderate">Insufficient history</Badge>
-        {error && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{error}</p>
-        )}
-      </div>
-    )
-  }
-
-  const chartData = forecast.points.map((pt) => ({
-    label: pt.time.slice(0, 10),
-    value: pt.value,
-    lower: pt.lower ?? pt.value,
-    upper: pt.upper ?? pt.value,
-  }))
-
-  return (
-    <AreaChart
-      data={chartData}
-      height={180}
-      series={[
-        { key: 'upper', name: 'Upper bound', color: '#f97316', fillOpacity: 0.15 },
-        { key: 'lower', name: 'Lower bound', color: '#6366f1', fillOpacity: 0.15 },
-        { key: 'value', name: 'Forecast', color: '#6366f1', fillOpacity: 0 },
-      ]}
-      showLegend
-    />
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) {
@@ -229,6 +106,13 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isTracked, setIsTracked] = useState(() => tracked.chokepoints.has(id))
+  const [latestDay, setLatestDay] = useState<BreakdownDay | undefined>()
+
+  const [window, setWindow] = useState<'7d' | '30d' | '90d'>(() => {
+    return (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
+  })
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
+  const [dashLoading, setDashLoading] = useState(true)
 
   useEffect(() => {
     return tracked.chokepoints.subscribe(() => setIsTracked(tracked.chokepoints.has(id)))
@@ -253,6 +137,20 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       cancelled = true
     }
   }, [id])
+
+  useEffect(() => {
+    let cancelled = false
+    setDashLoading(true)
+    fetchEntityDashboard('chokepoint', id, window)
+      .then((d) => { if (!cancelled) { setDashboard(d); setDashLoading(false) } })
+      .catch(() => { if (!cancelled) setDashLoading(false) })
+    return () => { cancelled = true }
+  }, [id, window])
+
+  const handleWindowChange = (w: '7d' | '30d' | '90d') => {
+    setWindow(w)
+    localStorage.setItem('entity_window', w)
+  }
 
   const toggleTrack = () => {
     if (isTracked) {
@@ -303,7 +201,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
           <DataState
             status="error"
             error={error ?? 'Chokepoint not found'}
-            onRetry={() => window.location.reload()}
+            onRetry={() => globalThis.location.reload()}
           />
         </Card>
       </div>
@@ -330,6 +228,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
             {cp.updated_at ? `Updated ${cp.updated_at.slice(0, 10)}` : ''}
           </p>
         </div>
+        <WindowPicker value={window} onChange={handleWindowChange} />
         <SyncButton />
         <button
           onClick={toggleTrack}
@@ -346,7 +245,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       </div>
 
       {/* KPI Strip */}
-      <KpiStrip cp={cp} />
+      <KpiStrip cp={cp} latestDay={latestDay} />
 
       {/* Map */}
       {cp.lon != null && cp.lat != null && (
@@ -355,19 +254,51 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
         </Card>
       )}
 
-      {/* 50-day breakdown chart */}
+      {/* 50-day breakdown chart — kept as-is (uses separate breakdown endpoint) */}
       <Card title="Transit Activity — 50-day strip">
-        <BreakdownChart id={id} />
+        <BreakdownChart id={id} onLatestDay={setLatestDay} />
       </Card>
 
-      {/* Metric drill-down */}
-      <Card title="Metric Breakdown">
-        <MetricDrilldown cpId={cp.id} />
+      {/* Risk & Forecast from dashboard bundle */}
+      <Card title="Risk & Forecast">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <RiskForecastChart
+            riskTrend={dashboard?.charts.risk_trend ?? []}
+            forecast={dashboard?.charts.forecast ?? []}
+          />
+        )}
       </Card>
 
-      {/* Forecast panel */}
-      <Card title="14-Day Forecast">
-        <ForecastPanel entityType="chokepoint" entityId={id} />
+      {/* Vessel Count */}
+      <Card title="Vessel Count">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <VesselCountChart data={dashboard?.charts.vessel_count ?? []} />
+        )}
+      </Card>
+
+      {/* Median Speed */}
+      <Card title="Median Speed">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <MedianSpeedChart data={dashboard?.charts.median_speed ?? []} />
+        )}
+      </Card>
+
+      {/* Macro Indices */}
+      <Card title="Macro Indices">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <IndicesPanel
+            indices={dashboard?.charts.indices ?? []}
+            bunker={dashboard?.charts.bunker ?? []}
+          />
+        )}
       </Card>
 
       {/* LLM Narrative */}

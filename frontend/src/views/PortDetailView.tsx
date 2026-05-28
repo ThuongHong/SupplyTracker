@@ -5,14 +5,19 @@ import { DataState } from '../components/ui/DataState'
 import { AreaChart } from '../components/ui/AreaChart'
 import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
+import { WindowPicker } from '../components/ui/WindowPicker'
 import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
 import { navigate } from '../router'
 import { fetchPort, fetchPortMetrics } from '../api/ports'
-import { fetchRiskForecast } from '../api/risk'
+import { fetchEntityDashboard } from '../api/dashboard'
 import { tracked } from '../data/tracked'
 import { EventLog } from '../components/EventLog'
 import { SyncButton } from '../components/SyncButton'
-import type { PortDetail, RiskForecast, MetricPoint } from '../api/types'
+import { VesselMixChart } from '../components/charts/VesselMixChart'
+import { DwellTrendChart } from '../components/charts/DwellTrendChart'
+import { RiskForecastChart } from '../components/charts/RiskForecastChart'
+import { IndicesPanel } from '../components/charts/IndicesPanel'
+import type { PortDetail, MetricPoint, DashboardResponse } from '../api/types'
 
 interface PortDetailViewProps {
   id: string
@@ -121,69 +126,6 @@ function MetricDrilldown({ portId }: { portId: number }) {
   )
 }
 
-// ─── Forecast Panel ──────────────────────────────────────────────────────────
-
-function ForecastPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const [forecast, setForecast] = useState<RiskForecast | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchRiskForecast(entityType, entityId)
-      .then((f) => {
-        if (cancelled) return
-        setForecast(f)
-        setLoading(false)
-      })
-      .catch((e: Error) => {
-        if (cancelled) return
-        setError(e.message)
-        setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [entityType, entityId])
-
-  if (loading) return <DataState status="loading" />
-  if (error) {
-    return (
-      <div className="py-6 text-center">
-        <Badge variant="moderate">Insufficient history</Badge>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{error}</p>
-      </div>
-    )
-  }
-  if (!forecast || !forecast.points.length) {
-    return (
-      <div className="py-6 text-center">
-        <Badge variant="moderate">Insufficient history</Badge>
-      </div>
-    )
-  }
-
-  const chartData = forecast.points.map((pt) => ({
-    label: pt.time.slice(0, 10),
-    value: pt.value,
-    lower: pt.lower ?? pt.value,
-    upper: pt.upper ?? pt.value,
-  }))
-
-  return (
-    <AreaChart
-      data={chartData}
-      height={180}
-      series={[
-        { key: 'upper', name: 'Upper bound', color: '#f97316', fillOpacity: 0.15 },
-        { key: 'lower', name: 'Lower bound', color: '#6366f1', fillOpacity: 0.15 },
-        { key: 'value', name: 'Forecast', color: '#6366f1', fillOpacity: 0 },
-      ]}
-      showLegend
-    />
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function PortDetailView({ id }: PortDetailViewProps) {
@@ -191,6 +133,12 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isTracked, setIsTracked] = useState(() => tracked.ports.has(id))
+
+  const [window, setWindow] = useState<'7d' | '30d' | '90d'>(() => {
+    return (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
+  })
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
+  const [dashLoading, setDashLoading] = useState(true)
 
   useEffect(() => tracked.ports.subscribe(() => setIsTracked(tracked.ports.has(id))), [id])
 
@@ -213,6 +161,20 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       cancelled = true
     }
   }, [id])
+
+  useEffect(() => {
+    let cancelled = false
+    setDashLoading(true)
+    fetchEntityDashboard('port', id, window)
+      .then((d) => { if (!cancelled) { setDashboard(d); setDashLoading(false) } })
+      .catch(() => { if (!cancelled) setDashLoading(false) })
+    return () => { cancelled = true }
+  }, [id, window])
+
+  const handleWindowChange = (w: '7d' | '30d' | '90d') => {
+    setWindow(w)
+    localStorage.setItem('entity_window', w)
+  }
 
   const toggleTrack = () => {
     if (isTracked) {
@@ -256,7 +218,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Port Detail</h1>
         </div>
         <Card>
-          <DataState status="error" error={error ?? 'Port not found'} onRetry={() => window.location.reload()} />
+          <DataState status="error" error={error ?? 'Port not found'} onRetry={() => globalThis.location.reload()} />
         </Card>
       </div>
     )
@@ -287,6 +249,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
             {port.updated_at ? ` · Updated ${port.updated_at.slice(0, 10)}` : ''}
           </p>
         </div>
+        <WindowPicker value={window} onChange={handleWindowChange} />
         <SyncButton />
         <button
           onClick={toggleTrack}
@@ -322,9 +285,46 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         <MetricDrilldown portId={port.id} />
       </Card>
 
-      {/* Forecast panel */}
-      <Card title="14-Day Forecast">
-        <ForecastPanel entityType="port" entityId={id} />
+      {/* Risk & Forecast from dashboard bundle */}
+      <Card title="Risk & Forecast">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <RiskForecastChart
+            riskTrend={dashboard?.charts.risk_trend ?? []}
+            forecast={dashboard?.charts.forecast ?? []}
+          />
+        )}
+      </Card>
+
+      {/* Vessel Status */}
+      <Card title="Vessel Status">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <VesselMixChart data={dashboard?.charts.vessel_mix ?? []} />
+        )}
+      </Card>
+
+      {/* Avg Dwell Hours */}
+      <Card title="Avg Dwell Hours">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <DwellTrendChart data={dashboard?.charts.dwell_hours ?? []} />
+        )}
+      </Card>
+
+      {/* Macro Indices */}
+      <Card title="Macro Indices">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <IndicesPanel
+            indices={dashboard?.charts.indices ?? []}
+            bunker={dashboard?.charts.bunker ?? []}
+          />
+        )}
       </Card>
 
       {/* LLM Narrative */}
