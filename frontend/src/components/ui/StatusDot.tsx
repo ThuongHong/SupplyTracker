@@ -1,16 +1,17 @@
 import React from 'react'
-import type { Severity } from './Badge'
+import { normalizeSeverity, type Severity } from './Badge'
 
 interface StatusDotProps {
-  severity: Severity | 'unknown'
+  severity: string | null | undefined
   size?: 'sm' | 'md' | 'lg'
   pulse?: boolean
   label?: string
   className?: string
 }
 
-const colorClasses: Record<Severity | 'unknown', string> = {
+const colorClasses: Record<Severity, string> = {
   low: 'bg-green-500 dark:bg-green-400',
+  elevated: 'bg-amber-500 dark:bg-amber-400',
   moderate: 'bg-amber-500 dark:bg-amber-400',
   high: 'bg-orange-500 dark:bg-orange-400',
   critical: 'bg-red-500 dark:bg-red-400',
@@ -30,14 +31,16 @@ export function StatusDot({
   label,
   className = '',
 }: StatusDotProps) {
-  const color = colorClasses[severity]
+  const normalized = normalizeSeverity(severity)
+  const color = colorClasses[normalized]
   const sz = sizeClasses[size]
+  const accessibleLabel = label ?? normalized
 
   return (
     <span
       className={['relative inline-flex items-center justify-center', className].join(' ')}
-      aria-label={label ?? severity}
-      title={label ?? severity}
+      aria-label={accessibleLabel}
+      title={accessibleLabel}
     >
       {pulse && (
         <span

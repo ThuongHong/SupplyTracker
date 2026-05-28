@@ -10,11 +10,11 @@
  *   other 4xx/5xx → throws ApiError
  */
 
-const DEFAULT_BASE = 'http://localhost:8000'
-
 function getBaseUrl(): string {
   // Vite injects VITE_ env vars at build time
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_BASE
+  const configured = import.meta.env.VITE_API_BASE_URL as string | undefined
+  if (configured) return configured
+  return 'http://localhost:8000'
 }
 
 // ─── Error types ────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function extractMessage(body: unknown): string {
 export interface FetchOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
   /** Query parameters — appended to the URL */
-  params?: Record<string, string | number | boolean | null | undefined>
+  params?: object
 }
 
 export async function apiFetch<T>(
@@ -79,7 +79,11 @@ export async function apiFetch<T>(
   const url = new URL(path, getBaseUrl())
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      if (v !== null && v !== undefined) {
+      if (
+        v !== null &&
+        v !== undefined &&
+        (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+      ) {
         url.searchParams.set(k, String(v))
       }
     }

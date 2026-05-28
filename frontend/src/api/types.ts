@@ -40,6 +40,9 @@ export interface PortSummary {
   region: string | null
   severity: string | null
   risk_score?: number | null
+  congestion_score?: number | null
+  dwell_time_hours?: number | null
+  vessel_count?: number | null
   updated_at?: string | null
 }
 
@@ -79,8 +82,12 @@ export interface PortDetail extends PortSummary {
 export interface ChokepointSummary {
   id: number
   name: string
+  region?: string | null
   severity: string | null
   risk_score?: number | null
+  transit_count?: number | null
+  transit_time_hours?: number | null
+  transit_delta_pct?: number | null
   updated_at?: string | null
 }
 

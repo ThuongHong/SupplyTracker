@@ -5,8 +5,9 @@ import React, {
   useState,
 } from 'react'
 import { currentRoute, parseHash, navigate, Route } from './router'
-import Sidebar from './components/layout/Sidebar'
-import Header from './components/layout/Header'
+import Tape from './components/layout/Tape'
+import Masthead from './components/layout/Masthead'
+import NavBar from './components/layout/NavBar'
 import { DataState } from './components/ui/DataState'
 import ChatbotWidget from './components/ChatbotWidget'
 
@@ -64,11 +65,12 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white dark:bg-gray-900">
-      <Sidebar activeRoute={route} />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+    <div className="min-h-screen bg-[color:var(--paper)] text-[color:var(--ink)]">
+      <Tape />
+      <div className="frame">
+        <Masthead />
+        <NavBar activeRoute={route} />
+        <main className="pt-8">
           <RouterOutlet route={route} />
         </main>
       </div>
