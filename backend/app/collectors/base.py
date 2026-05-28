@@ -64,33 +64,57 @@ class BaseCollector(ABC):
         base_delay: float = 1.0,
         **kwargs: object,
     ) -> httpx.Response:
+        _RETRYABLE_STATUSES = {429, 503, 504}
         last_exc: Exception | None = None
         for attempt in range(max_retries):
             try:
                 response = client.request(method, url, **kwargs)
-                if response.status_code == 429:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after is not None:
-                        try:
-                            delay = float(retry_after)
-                        except ValueError:
+                if response.status_code in _RETRYABLE_STATUSES:
+                    if response.status_code == 429:
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after is not None:
+                            try:
+                                delay = float(retry_after)
+                            except ValueError:
+                                delay = base_delay * (2 ** attempt)
+                        else:
                             delay = base_delay * (2 ** attempt)
                     else:
+                        # 503/504 — use exponential backoff
                         delay = base_delay * (2 ** attempt)
                     if attempt < max_retries - 1:
                         logger.warning(
-                            "Rate limited by %s, retrying in %.1fs (attempt %d/%d)",
+                            "Transient HTTP %d from %s, retrying in %.1fs (attempt %d/%d)",
+                            response.status_code,
                             url,
                             delay,
                             attempt + 1,
                             max_retries,
                         )
                         time.sleep(delay)
+                        last_exc = httpx.HTTPStatusError(
+                            message=str(response.status_code),
+                            request=response.request,
+                            response=response,
+                        )
                         continue
                     response.raise_for_status()
                 return response
-            except httpx.HTTPStatusError:
-                raise
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in _RETRYABLE_STATUSES:
+                    raise
+                last_exc = exc
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(
+                        "Transient HTTP %d from %s, retrying in %.1fs (attempt %d/%d)",
+                        exc.response.status_code,
+                        url,
+                        delay,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    time.sleep(delay)
             except httpx.RequestError as exc:
                 last_exc = exc
                 if attempt < max_retries - 1:
@@ -102,8 +126,10 @@ class BaseCollector(ABC):
                         delay,
                     )
                     time.sleep(delay)
+        if last_exc is None:
+            raise RuntimeError("No request was attempted (max_retries must be >= 1)")
         raise RuntimeError(
-            f"Max retries ({max_retries}) exceeded for {url}"
+            f"Request failed after {max_retries} retries for {url}"
         ) from last_exc
 
     def _upsert_coverage(
