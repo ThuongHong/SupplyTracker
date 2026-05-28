@@ -4,11 +4,11 @@ import type {
   PaginationParams,
   PortSummary,
   PortDetail,
-  Severity,
+  PortMetricsResponse,
 } from './types'
 
 export interface PortsParams extends PaginationParams {
-  severity?: Severity
+  severity?: string
 }
 
 export function fetchPorts(
@@ -17,6 +17,13 @@ export function fetchPorts(
   return apiGet<PaginatedResponse<PortSummary>>('/api/v1/ports', params)
 }
 
-export function fetchPort(id: string): Promise<PortDetail> {
+export function fetchPort(id: string | number): Promise<PortDetail> {
   return apiGet<PortDetail>(`/api/v1/ports/${encodeURIComponent(id)}`)
+}
+
+export function fetchPortMetrics(
+  id: string | number,
+  days = 90,
+): Promise<PortMetricsResponse> {
+  return apiGet<PortMetricsResponse>(`/api/v1/ports/${encodeURIComponent(id)}/metrics`, { days })
 }

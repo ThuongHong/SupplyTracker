@@ -4,12 +4,12 @@ import type {
   PaginationParams,
   ChokepointSummary,
   ChokepointDetail,
-  ChokepointBreakdown,
-  Severity,
+  ChokepointBreakdownResponse,
+  ChokepointMetricsResponse,
 } from './types'
 
 export interface ChokepointsParams extends PaginationParams {
-  severity?: Severity
+  severity?: string
 }
 
 export function fetchChokepoints(
@@ -18,12 +18,22 @@ export function fetchChokepoints(
   return apiGet<PaginatedResponse<ChokepointSummary>>('/api/v1/chokepoints', params)
 }
 
-export function fetchChokepoint(id: string): Promise<ChokepointDetail> {
+export function fetchChokepoint(id: string | number): Promise<ChokepointDetail> {
   return apiGet<ChokepointDetail>(`/api/v1/chokepoints/${encodeURIComponent(id)}`)
 }
 
-export function fetchChokepointBreakdown(id: string): Promise<ChokepointBreakdown> {
-  return apiGet<ChokepointBreakdown>(
+export function fetchChokepointBreakdown(id: string | number): Promise<ChokepointBreakdownResponse> {
+  return apiGet<ChokepointBreakdownResponse>(
     `/api/v1/chokepoints/${encodeURIComponent(id)}/breakdown`,
+  )
+}
+
+export function fetchChokepointMetrics(
+  id: string | number,
+  days = 90,
+): Promise<ChokepointMetricsResponse> {
+  return apiGet<ChokepointMetricsResponse>(
+    `/api/v1/chokepoints/${encodeURIComponent(id)}/metrics`,
+    { days },
   )
 }

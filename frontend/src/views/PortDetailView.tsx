@@ -7,11 +7,11 @@ import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
 import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
 import { navigate } from '../router'
-import { fetchPort } from '../api/ports'
+import { fetchPort, fetchPortMetrics } from '../api/ports'
 import { fetchRiskForecast } from '../api/risk'
 import { fetchStory } from '../api/story'
 import { tracked } from '../data/tracked'
-import type { PortDetail, RiskForecast, StoryEvent, Severity } from '../api/types'
+import type { PortDetail, RiskForecast, StoryEvent, MetricPoint } from '../api/types'
 
 interface PortDetailViewProps {
   id: string
@@ -22,20 +22,12 @@ interface PortDetailViewProps {
 function KpiStrip({ port }: { port: PortDetail }) {
   const score = port.risk_snapshot?.composite_score ?? port.risk_score
   const trend = port.risk_snapshot?.trend
-  const comps = port.risk_snapshot?.components ?? {}
 
   const items = [
-    { label: 'Risk Score', value: score !== undefined ? score.toFixed(2) : '—' },
+    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—' },
     { label: 'Trend', value: trend ?? '—' },
-    {
-      label: 'Vessels',
-      value: port.vessel_count !== undefined ? String(port.vessel_count) : '—',
-    },
-    {
-      label: 'Congestion',
-      value:
-        port.congestion_index !== undefined ? port.congestion_index.toFixed(2) : '—',
-    },
+    { label: 'Severity', value: port.severity ?? '—' },
+    { label: 'Locode', value: port.locode ?? '—' },
   ]
 
   return (
@@ -55,34 +47,45 @@ function KpiStrip({ port }: { port: PortDetail }) {
 
 // ─── Metric Drill-down ────────────────────────────────────────────────────────
 
-function MetricDrilldown({ components }: { components: Record<string, number> }) {
-  const keys = Object.keys(components)
-  const [selected, setSelected] = useState(keys[0] ?? '')
+function MetricDrilldown({ portId }: { portId: number }) {
+  const [allMetrics, setAllMetrics] = useState<Record<string, MetricPoint[]>>({})
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetchPortMetrics(portId)
+      .then((res) => {
+        if (cancelled) return
+        setAllMetrics(res.metrics)
+        const keys = Object.keys(res.metrics)
+        if (keys.length && !selected) setSelected(keys[0])
+        setLoading(false)
+      })
+      .catch(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [portId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const keys = Object.keys(allMetrics)
 
   const chartData = useMemo(() => {
-    if (!selected || components[selected] === undefined) return []
-    const value = components[selected]
-    const mean = value
-    // 30-day baseline: ±10% dummy bands around the value
-    return Array.from({ length: 30 }, (_, i) => ({
-      label: `D-${29 - i}`,
-      value: mean + (Math.random() - 0.5) * mean * 0.1,
-      lower: mean * 0.9,
-      upper: mean * 1.1,
-    }))
-  }, [selected, components])
+    const pts = allMetrics[selected] ?? []
+    return pts.map((p) => ({ label: p.time.slice(0, 10), value: p.value }))
+  }, [selected, allMetrics])
 
+  const currentVal = useMemo(() => {
+    const pts = allMetrics[selected] ?? []
+    return pts.length ? pts[pts.length - 1].value : null
+  }, [selected, allMetrics])
+
+  if (loading) return <DataState status="loading" />
   if (!keys.length) {
-    return (
-      <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
-        No component metrics available.
-      </p>
-    )
+    return <DataState status="empty" emptyMessage="No metric data available" />
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <label
           htmlFor="metric-picker"
           className="text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -96,56 +99,23 @@ function MetricDrilldown({ components }: { components: Record<string, number> })
           className="text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           {keys.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
+            <option key={k} value={k}>{k}</option>
           ))}
         </select>
-        {selected && components[selected] !== undefined && (
+        {currentVal !== null && (
           <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Current: {components[selected].toFixed(3)}
+            Latest: {currentVal.toFixed(2)}
           </span>
         )}
       </div>
       {chartData.length > 0 && (
-        <>
-          <AreaChart
-            data={chartData}
-            height={180}
-            series={[
-              { key: 'upper', name: 'Baseline Upper', color: '#e5e7eb', fillOpacity: 0.3 },
-              { key: 'lower', name: 'Baseline Lower', color: '#e5e7eb', fillOpacity: 0.3 },
-              { key: 'value', name: selected, color: '#6366f1', fillOpacity: 0.15 },
-            ]}
-            showLegend
-          />
-          <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <Badge variant="info">Gray bands = ±10% of mean (proxy baseline)</Badge>
-          </div>
-        </>
+        <AreaChart
+          data={chartData}
+          height={180}
+          series={[{ key: 'value', name: selected, color: '#6366f1', fillOpacity: 0.15 }]}
+          showLegend
+        />
       )}
-      {/* Drivers bar chart — component breakdown */}
-      <div className="space-y-1.5">
-        {keys.map((k) => {
-          const val = components[k]
-          const maxVal = Math.max(...Object.values(components))
-          const pct = maxVal > 0 ? (val / maxVal) * 100 : 0
-          return (
-            <div key={k} className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400 w-28 truncate">{k}</span>
-              <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="h-2 rounded-full bg-indigo-500"
-                  style={{ width: `${pct.toFixed(1)}%` }}
-                />
-              </div>
-              <span className="text-xs font-mono text-gray-700 dark:text-gray-300 w-12 text-right">
-                {val.toFixed(3)}
-              </span>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
@@ -344,8 +314,6 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
     )
   }
 
-  const components = port.risk_snapshot?.components ?? {}
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -389,22 +357,20 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       <KpiStrip port={port} />
 
       {/* Map */}
-      <Card title="Location">
-        <MiniMap
-          center={[port.lon, port.lat]}
-          zoom={6}
-          height={240}
-          showMarker
-        />
-      </Card>
+      {port.lon != null && port.lat != null && (
+        <Card title="Location">
+          <MiniMap
+            center={[port.lon, port.lat]}
+            zoom={6}
+            height={240}
+            showMarker
+          />
+        </Card>
+      )}
 
       {/* Metric drill-down */}
       <Card title="Metric Breakdown">
-        {Object.keys(components).length === 0 ? (
-          <DataState status="empty" emptyMessage="No component data available" />
-        ) : (
-          <MetricDrilldown components={components} />
-        )}
+        <MetricDrilldown portId={port.id} />
       </Card>
 
       {/* Forecast panel */}

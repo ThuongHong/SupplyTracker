@@ -13,6 +13,7 @@ dependencies = [
     "alembic>=1.13",
     "psycopg[binary]>=3.2",
     "geoalchemy2>=0.15",
+    "shapely>=2.0",
     "celery[redis]>=5.4",
     "flower>=2.0",
     "redis>=5.1",

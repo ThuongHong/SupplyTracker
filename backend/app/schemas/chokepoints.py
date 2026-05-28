@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.schemas.ports import MetricPoint, RiskSnapshotEmbed
+
 
 class ChokepointListItem(BaseModel):
     id: int
@@ -18,9 +20,19 @@ class ChokepointDetail(BaseModel):
     id: int
     name: str
     severity: str | None = None
-    coordinates: list[list[float]] | None = None  # polygon coords [[lon, lat], ...]
+    coordinates: list[list[float]] | None = None
+    lat: float | None = None
+    lon: float | None = None
+    risk_score: float | None = None
+    risk_snapshot: RiskSnapshotEmbed | None = None
+    updated_at: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ChokepointMetricsResponse(BaseModel):
+    entity_id: str
+    metrics: dict[str, list[MetricPoint]]
 
 
 class ChokepointsResponse(BaseModel):

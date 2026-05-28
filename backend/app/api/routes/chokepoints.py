@@ -10,20 +10,23 @@ from sqlalchemy import Date as SaDate
 from sqlalchemy import cast, desc, func, select
 
 from app.api.deps import DbSession
-from app.db.models import Chokepoint, ChokepointRiskScore, PortWatchMetric
+from app.db.models import Chokepoint, ChokepointRiskScore, PortWatchMetric, RiskFeatureSnapshot
 from app.schemas.chokepoints import (
     ChokepointBreakdownDay,
     ChokepointBreakdownResponse,
     ChokepointDetail,
     ChokepointListItem,
+    ChokepointMetricsResponse,
     ChokepointsResponse,
 )
+from app.schemas.ports import MetricPoint, RiskSnapshotEmbed
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chokepoints"])
 
 _BREAKDOWN_DAYS = 50
+_METRICS_DAYS = 90
 
 
 def _latest_chokepoint_severity(db: DbSession, entity_id: str) -> str | None:
@@ -83,10 +86,42 @@ def _geom_to_polygon_coords(geom: Any) -> list[list[float]] | None:
         return None
 
 
+def _geom_centroid(geom: Any) -> tuple[float, float] | None:
+    """Return (lon, lat) centroid of a polygon WKBElement."""
+    if geom is None:
+        return None
+    try:
+        from geoalchemy2.shape import to_shape
+        shape = to_shape(geom)
+        return shape.centroid.x, shape.centroid.y
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _latest_cp_snapshot(db: Any, entity_id: str) -> RiskSnapshotEmbed | None:
+    snap = (
+        db.query(RiskFeatureSnapshot)
+        .filter(
+            RiskFeatureSnapshot.entity_type == "chokepoint",
+            RiskFeatureSnapshot.entity_id == entity_id,
+        )
+        .order_by(desc(RiskFeatureSnapshot.snapshot_date))
+        .first()
+    )
+    if snap is None:
+        return None
+    return RiskSnapshotEmbed(
+        composite_score=snap.risk_score,
+        trend=None,
+        components={k: float(v) for k, v in (snap.feature_values or {}).items()},
+        updated_at=snap.snapshot_date.isoformat() if snap.snapshot_date else None,
+    )
+
+
 @router.get("/chokepoints", response_model=ChokepointsResponse)
 def list_chokepoints(
     db: DbSession,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     severity: str | None = Query(None),
 ) -> ChokepointsResponse:
@@ -146,6 +181,41 @@ def list_chokepoints(
     )
 
 
+@router.get("/chokepoints/{chokepoint_id}/metrics", response_model=ChokepointMetricsResponse)
+def get_chokepoint_metrics(
+    chokepoint_id: int,
+    db: DbSession,
+    days: int = Query(_METRICS_DAYS, ge=7, le=365),
+) -> ChokepointMetricsResponse:
+    """Return per-metric timeseries for a chokepoint over the last N days."""
+    cp = db.query(Chokepoint).filter(Chokepoint.id == chokepoint_id).first()
+    if cp is None:
+        raise HTTPException(status_code=404, detail=f"Chokepoint {chokepoint_id} not found")
+
+    entity_id = _chokepoint_entity_id(cp)
+    cutoff = datetime.now(tz=UTC) - timedelta(days=days)
+
+    rows = (
+        db.query(PortWatchMetric.metric_name, PortWatchMetric.observed_at, PortWatchMetric.metric_value)
+        .filter(
+            PortWatchMetric.entity_type == "chokepoint",
+            PortWatchMetric.entity_id == entity_id,
+            PortWatchMetric.observed_at >= cutoff,
+        )
+        .order_by(PortWatchMetric.metric_name, PortWatchMetric.observed_at)
+        .all()
+    )
+
+    metrics: dict[str, list[MetricPoint]] = {}
+    for metric_name, observed_at, value in rows:
+        if metric_name not in metrics:
+            metrics[metric_name] = []
+        ts = observed_at.isoformat() if hasattr(observed_at, "isoformat") else str(observed_at)
+        metrics[metric_name].append(MetricPoint(time=ts, value=float(value)))
+
+    return ChokepointMetricsResponse(entity_id=entity_id, metrics=metrics)
+
+
 @router.get("/chokepoints/{chokepoint_id}", response_model=ChokepointDetail)
 def get_chokepoint(chokepoint_id: int, db: DbSession) -> ChokepointDetail:
     """Return full detail for a single chokepoint."""
@@ -156,12 +226,30 @@ def get_chokepoint(chokepoint_id: int, db: DbSession) -> ChokepointDetail:
     entity_id = _chokepoint_entity_id(cp)
     sev = _latest_chokepoint_severity(db, entity_id)
     coords = _geom_to_polygon_coords(cp.geom)
+    centroid = _geom_centroid(cp.geom)
+    lon, lat = (centroid[0], centroid[1]) if centroid else (None, None)
+
+    score_row = (
+        db.query(ChokepointRiskScore.score, ChokepointRiskScore.as_of)
+        .filter(ChokepointRiskScore.entity_id == entity_id)
+        .order_by(desc(ChokepointRiskScore.as_of))
+        .first()
+    )
+    risk_score = float(score_row[0]) if score_row and score_row[0] is not None else None
+    updated_at = score_row[1].isoformat() if score_row and score_row[1] else None
+
+    snapshot = _latest_cp_snapshot(db, entity_id)
 
     return ChokepointDetail(
         id=cp.id,
         name=cp.name,
         severity=sev,
         coordinates=coords,
+        lat=lat,
+        lon=lon,
+        risk_score=risk_score,
+        risk_snapshot=snapshot,
+        updated_at=updated_at,
     )
 
 

@@ -7,11 +7,11 @@ import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
 import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
 import { navigate } from '../router'
-import { fetchChokepoint, fetchChokepointBreakdown } from '../api/chokepoints'
+import { fetchChokepoint, fetchChokepointBreakdown, fetchChokepointMetrics } from '../api/chokepoints'
 import { fetchRiskForecast } from '../api/risk'
 import { fetchStory } from '../api/story'
 import { tracked } from '../data/tracked'
-import type { ChokepointDetail, RiskForecast, StoryEvent, BreakdownDay } from '../api/types'
+import type { ChokepointDetail, RiskForecast, StoryEvent, BreakdownDay, MetricPoint } from '../api/types'
 
 interface ChokepointDetailViewProps {
   id: string
@@ -24,15 +24,12 @@ function KpiStrip({ cp, latestDay }: { cp: ChokepointDetail; latestDay?: Breakdo
   const trend = cp.risk_snapshot?.trend
 
   const items = [
-    { label: 'Risk Score', value: score !== undefined ? score.toFixed(2) : '—' },
+    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—' },
     { label: 'Trend', value: trend ?? '—' },
+    { label: 'Severity', value: cp.severity ?? '—' },
     {
-      label: 'Transit Count',
-      value: cp.transit_count !== undefined ? String(cp.transit_count) : '—',
-    },
-    {
-      label: 'Latest Value',
-      value: latestDay ? latestDay.value.toFixed(1) : '—',
+      label: 'Latest Transit',
+      value: latestDay ? latestDay.total.toFixed(0) : '—',
     },
   ]
 
@@ -85,7 +82,7 @@ function BreakdownChart({ id }: { id: string }) {
 
   const chartData = days.map((d) => ({
     label: d.date.slice(5),
-    value: d.value,
+    value: d.total,
   }))
 
   return <AreaChart data={chartData} height={180} />
@@ -93,33 +90,45 @@ function BreakdownChart({ id }: { id: string }) {
 
 // ─── Metric Drill-down ────────────────────────────────────────────────────────
 
-function MetricDrilldown({ components }: { components: Record<string, number> }) {
-  const keys = Object.keys(components)
-  const [selected, setSelected] = useState(keys[0] ?? '')
+function MetricDrilldown({ cpId }: { cpId: number }) {
+  const [allMetrics, setAllMetrics] = useState<Record<string, MetricPoint[]>>({})
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetchChokepointMetrics(cpId)
+      .then((res) => {
+        if (cancelled) return
+        setAllMetrics(res.metrics)
+        const keys = Object.keys(res.metrics)
+        if (keys.length && !selected) setSelected(keys[0])
+        setLoading(false)
+      })
+      .catch(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [cpId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const keys = Object.keys(allMetrics)
 
   const chartData = useMemo(() => {
-    if (!selected || components[selected] === undefined) return []
-    const value = components[selected]
-    const mean = value
-    return Array.from({ length: 30 }, (_, i) => ({
-      label: `D-${29 - i}`,
-      value: mean + (Math.random() - 0.5) * mean * 0.1,
-      lower: mean * 0.9,
-      upper: mean * 1.1,
-    }))
-  }, [selected, components])
+    const pts = allMetrics[selected] ?? []
+    return pts.map((p) => ({ label: p.time.slice(0, 10), value: p.value }))
+  }, [selected, allMetrics])
 
+  const currentVal = useMemo(() => {
+    const pts = allMetrics[selected] ?? []
+    return pts.length ? pts[pts.length - 1].value : null
+  }, [selected, allMetrics])
+
+  if (loading) return <DataState status="loading" />
   if (!keys.length) {
-    return (
-      <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
-        No component metrics available.
-      </p>
-    )
+    return <DataState status="empty" emptyMessage="No metric data available" />
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <label
           htmlFor="cp-metric-picker"
           className="text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -133,55 +142,23 @@ function MetricDrilldown({ components }: { components: Record<string, number> })
           className="text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           {keys.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
+            <option key={k} value={k}>{k}</option>
           ))}
         </select>
-        {selected && components[selected] !== undefined && (
+        {currentVal !== null && (
           <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Current: {components[selected].toFixed(3)}
+            Latest: {currentVal.toFixed(2)}
           </span>
         )}
       </div>
       {chartData.length > 0 && (
-        <>
-          <AreaChart
-            data={chartData}
-            height={180}
-            series={[
-              { key: 'upper', name: 'Baseline Upper', color: '#e5e7eb', fillOpacity: 0.3 },
-              { key: 'lower', name: 'Baseline Lower', color: '#e5e7eb', fillOpacity: 0.3 },
-              { key: 'value', name: selected, color: '#6366f1', fillOpacity: 0.15 },
-            ]}
-            showLegend
-          />
-          <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <Badge variant="info">Gray bands = ±10% of mean (proxy baseline)</Badge>
-          </div>
-        </>
+        <AreaChart
+          data={chartData}
+          height={180}
+          series={[{ key: 'value', name: selected, color: '#6366f1', fillOpacity: 0.15 }]}
+          showLegend
+        />
       )}
-      <div className="space-y-1.5">
-        {keys.map((k) => {
-          const val = components[k]
-          const maxVal = Math.max(...Object.values(components))
-          const pct = maxVal > 0 ? (val / maxVal) * 100 : 0
-          return (
-            <div key={k} className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400 w-28 truncate">{k}</span>
-              <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="h-2 rounded-full bg-indigo-500"
-                  style={{ width: `${pct.toFixed(1)}%` }}
-                />
-              </div>
-              <span className="text-xs font-mono text-gray-700 dark:text-gray-300 w-12 text-right">
-                {val.toFixed(3)}
-              </span>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
@@ -385,8 +362,6 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
     )
   }
 
-  const components = cp.risk_snapshot?.components ?? {}
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -404,8 +379,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
             <SeverityBadge severity={cp.severity} />
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            {cp.region}
-            {cp.updated_at ? ` · Updated ${cp.updated_at.slice(0, 10)}` : ''}
+            {cp.updated_at ? `Updated ${cp.updated_at.slice(0, 10)}` : ''}
           </p>
         </div>
         <button
@@ -426,9 +400,11 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       <KpiStrip cp={cp} />
 
       {/* Map */}
-      <Card title="Location">
-        <MiniMap center={[cp.lon, cp.lat]} zoom={5} height={240} showMarker />
-      </Card>
+      {cp.lon != null && cp.lat != null && (
+        <Card title="Location">
+          <MiniMap center={[cp.lon, cp.lat]} zoom={5} height={240} showMarker />
+        </Card>
+      )}
 
       {/* 50-day breakdown chart */}
       <Card title="Transit Activity — 50-day strip">
@@ -437,11 +413,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
 
       {/* Metric drill-down */}
       <Card title="Metric Breakdown">
-        {Object.keys(components).length === 0 ? (
-          <DataState status="empty" emptyMessage="No component data available" />
-        ) : (
-          <MetricDrilldown components={components} />
-        )}
+        <MetricDrilldown cpId={cp.id} />
       </Card>
 
       {/* Forecast panel */}

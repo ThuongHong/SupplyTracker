@@ -19,7 +19,7 @@ export interface PaginationParams {
 
 // ─── Severity ────────────────────────────────────────────────────────────────
 
-export type Severity = 'low' | 'moderate' | 'high' | 'critical'
+export type Severity = 'low' | 'elevated' | 'high' | 'critical' | 'unknown'
 
 // ─── Health ──────────────────────────────────────────────────────────────────
 
@@ -33,55 +33,78 @@ export interface HealthResponse {
 // ─── Ports ───────────────────────────────────────────────────────────────────
 
 export interface PortSummary {
-  id: string
+  id: number
+  locode: string | null
   name: string
   country: string
-  lat: number
-  lon: number
-  severity: Severity
-  risk_score?: number
-  vessel_count?: number
-  congestion_index?: number
-  updated_at: string
+  region: string | null
+  severity: string | null
+}
+
+export interface RiskSnapshotEmbed {
+  composite_score: number | null
+  trend: string | null
+  components: Record<string, number>
+  updated_at: string | null
+}
+
+export interface MetricPoint {
+  time: string
+  value: number
+}
+
+export interface PortMetricsResponse {
+  entity_id: string
+  metrics: Record<string, MetricPoint[]>
 }
 
 export interface PortDetail extends PortSummary {
-  unlocode?: string
-  region?: string
+  radius_km: number
+  twenty_ft_eq_units_year: number | null
+  coordinates: [number, number] | null
+  lat: number | null
+  lon: number | null
+  risk_score: number | null
+  risk_snapshot: RiskSnapshotEmbed | null
+  updated_at: string | null
+  unlocode: string | null
   description?: string
   insights?: InsightItem[]
-  risk_snapshot?: RiskSnapshot
 }
 
 // ─── Chokepoints ─────────────────────────────────────────────────────────────
 
 export interface ChokepointSummary {
-  id: string
+  id: number
   name: string
-  region: string
-  lat: number
-  lon: number
-  severity: Severity
-  risk_score?: number
-  transit_count?: number
-  updated_at: string
+  severity: string | null
 }
 
 export interface ChokepointDetail extends ChokepointSummary {
+  coordinates: [number, number][] | null
+  lat: number | null
+  lon: number | null
+  risk_score: number | null
+  risk_snapshot: RiskSnapshotEmbed | null
+  updated_at: string | null
   description?: string
   insights?: InsightItem[]
-  risk_snapshot?: RiskSnapshot
+}
+
+export interface ChokepointMetricsResponse {
+  entity_id: string
+  metrics: Record<string, MetricPoint[]>
 }
 
 export interface BreakdownDay {
   date: string
-  value: number
-  label?: string
+  total: number
+  categories: Record<string, number>
 }
 
-export interface ChokepointBreakdown {
-  entity_id: string
-  entity_name: string
+export interface ChokepointBreakdownResponse {
+  chokepoint_id: number
+  name: string
   days: BreakdownDay[]
 }
 
@@ -112,22 +135,15 @@ export interface IndicesResponse {
 
 // ─── Risk ─────────────────────────────────────────────────────────────────────
 
-export interface RiskSnapshot {
-  composite_score: number
-  trend: 'rising' | 'falling' | 'stable'
-  components: Record<string, number>
-  updated_at: string
-}
-
 export interface RiskScore {
   entity_type: string
   entity_id: string
   entity_name: string
-  composite_score: number
-  severity: Severity
-  trend: 'rising' | 'falling' | 'stable'
-  snapshot?: RiskSnapshot
-  updated_at: string
+  score: number | null
+  severity: string
+  freshness_status: string
+  as_of: string
+  time: string
 }
 
 export interface RiskScoresResponse {
@@ -141,12 +157,23 @@ export interface ForecastPoint {
   upper?: number
 }
 
+/** Backend returns predictions[], we map to points[] in the API layer */
 export interface RiskForecast {
   entity_type: string
   entity_id: string
   entity_name: string
+  horizon_days: number
+  predictions: Array<{
+    date: string
+    predicted_score: number
+    lower_bound: number | null
+    upper_bound: number | null
+  }>
+  data_sufficiency_status: string
+  created_at: string
+  stale: boolean
+  // mapped from predictions:
   points: ForecastPoint[]
-  generated_at: string
 }
 
 // ─── Story ────────────────────────────────────────────────────────────────────
@@ -158,7 +185,7 @@ export interface StoryEvent {
   entity_type?: string
   entity_id?: string
   entity_name?: string
-  severity: Severity
+  severity: string
   timestamp: string
 }
 
@@ -172,7 +199,7 @@ export interface StoryResponse {
 export interface InsightItem {
   id: string
   title: string
-  attention_level: Severity
+  attention_level: string
   narrative?: string
   entity_type?: string
   entity_id?: string
