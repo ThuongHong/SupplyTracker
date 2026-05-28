@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -139,8 +142,13 @@ def generate_forecast(
                     "high": float(frow.get("AutoETS-hi-80", frow["AutoETS"])),
                 }
             )
-    except Exception:
+    except (ValueError, RuntimeError) as exc:
+        # Fix #5: only catch known statsforecast failure modes; log before returning
+        logger.exception("statsforecast model fit failed for %s:%s:%s: %s", entity_type, entity_id, metric_name, exc)
         return _build_insufficient("model_fit_failed")
+    except Exception:
+        # Re-raise any unexpected exception (OOM, ImportError, etc.)
+        raise
 
     # Simple holdout backtest: last 14 days
     metrics_out: dict[str, Any] = {}
@@ -156,13 +164,41 @@ def generate_forecast(
                 }
             )
             sf2 = StatsForecast(models=[AutoETS()], freq="D", verbose=False)
-            bt_forecast = sf2.forecast(df=df_train, h=14)
+            bt_forecast = sf2.forecast(df=df_train, h=14, level=[80])
             bt_pred = bt_forecast["AutoETS"].tolist()
             bt_actual = holdout.tolist()
+
+            # Fix #3: compute smape, mape, and coverage_80 on holdout
             smape_val = _smape(bt_actual, bt_pred)
             metrics_out["smape_holdout_14d"] = smape_val
-        except Exception:
-            pass
+
+            # mape: mean absolute percentage error (skip rows where actual == 0)
+            mape_errors = []
+            for a, p in zip(bt_actual, bt_pred):
+                if a != 0:
+                    mape_errors.append(abs((a - p) / a) * 100)
+            mape_val = float(sum(mape_errors) / len(mape_errors)) if mape_errors else 0.0
+
+            # coverage_80: fraction of holdout actuals within predicted [lo80, hi80]
+            lo80_col = "AutoETS-lo-80"
+            hi80_col = "AutoETS-hi-80"
+            if lo80_col in bt_forecast.columns and hi80_col in bt_forecast.columns:
+                lo80 = bt_forecast[lo80_col].tolist()
+                hi80 = bt_forecast[hi80_col].tolist()
+                covered = sum(
+                    1 for a, lo, hi in zip(bt_actual, lo80, hi80) if lo <= a <= hi
+                )
+                coverage_80 = covered / len(bt_actual) if bt_actual else 0.80
+            else:
+                # Interval columns unavailable — use placeholder per spec
+                coverage_80 = 0.80  # not computed from actual holdout
+
+            metrics_out["mape"] = mape_val
+            metrics_out["smape"] = smape_val
+            metrics_out["coverage_80"] = coverage_80
+        except Exception as exc:
+            # Fix #6: log backtest failures instead of silently ignoring them
+            logger.warning("Backtest computation failed: %s", exc)
 
     # Derive key_drivers: top 3 other metrics by absolute correlation with residuals
     key_drivers: list[str] = []
@@ -221,6 +257,7 @@ def generate_forecast(
 
     upsert_vals: dict[str, Any] = {
         "forecast_key": forecast_key,
+        "created_at": datetime.now(timezone.utc),  # Fix #4: stamp explicitly rather than rely on server_default
         "entity_type": entity_type,
         "entity_id": entity_id,
         "entity_name": entity_name,

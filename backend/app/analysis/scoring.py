@@ -154,8 +154,14 @@ def score_entity(
 
         z_scores[comp.metric] = {"z_30d": z_30, "z_90d": z_90}
 
-        # Use z_30 for scoring; if unavailable, treat as 0 (neutral)
-        z_for_score = z_30 if z_30 is not None else 0.0
+        # Fix #7: when both z_30 and z_90 are None (no baseline data), treat
+        # the component as missing rather than scoring it as neutral z=0.
+        if z_30 is None and z_90 is None:
+            missing_components.append(comp.name)
+            continue
+
+        # Use z_30 for scoring; if unavailable fall back to z_90
+        z_for_score = z_30 if z_30 is not None else z_90
 
         # Negate z for "higher_is_better" so high value = lower risk
         if comp.direction == "higher_is_better":
@@ -173,13 +179,23 @@ def score_entity(
     missing_count = len(missing_components)
     missing_fraction = missing_count / total_components if total_components > 0 else 1.0
 
+    reasons: list[str] = []
     if missing_fraction > max_missing or weight_total == 0:
         severity = "unknown"
         final_score: float | None = None
+        # Fix #2: set reasons when insufficient
+        reasons = ["insufficient_components"]
     else:
         # Normalize by actual weight covered
         final_score = weighted_sum / weight_total
         severity = severity_from_score(final_score, thresholds)
+
+    # Fix #1: build driver_metadata with active thresholds and weights
+    driver_metadata: dict[str, Any] = {
+        "thresholds": thresholds,
+        "schema_version": _config["schema_version"],
+        "component_weights": {c.name: c.weight for c in applicable},
+    }
 
     now = datetime.now(tz=timezone.utc)
     as_of_dt = datetime(as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=timezone.utc)
@@ -200,7 +216,7 @@ def score_entity(
             z_scores=z_scores,
             deltas={},
             missing_features=missing_components,
-            driver_metadata=None,
+            driver_metadata=driver_metadata,
             feature_schema_version=_config["schema_version"],
         )
         .on_conflict_do_update(
@@ -213,6 +229,7 @@ def score_entity(
                 "baseline_values": baseline_values,
                 "z_scores": z_scores,
                 "missing_features": missing_components,
+                "driver_metadata": driver_metadata,
                 "feature_schema_version": _config["schema_version"],
             },
         )
@@ -235,6 +252,7 @@ def score_entity(
         z_scores=z_scores,
         deltas={},
         missing_features=missing_components,
+        driver_metadata=driver_metadata,
         feature_schema_version=_config["schema_version"],
     )
 
@@ -246,6 +264,7 @@ def score_entity(
         severity=severity,
         component_scores=component_scores,
         missing_components=missing_components,
+        reasons=reasons,
         freshness_status=freshness_status,
         as_of=as_of_dt,
     )

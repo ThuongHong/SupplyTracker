@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Insight, RiskStoryEvent
@@ -28,22 +29,18 @@ def materialize_insights(
         if event.attention_level not in _HIGH_ATTENTION:
             continue
 
-        # Check for a recent duplicate
-        existing = (
-            session.query(Insight)
-            .filter(
-                Insight.event_type == event.event_type,
-                Insight.generated_at >= cutoff,
-            )
-            .filter(
-                Insight.affected_entities.contains(  # type: ignore[attr-defined]
-                    [{"id": event.entity_id}]
-                )
-            )
-            .first()
+        # Fix #8: replace fragile JSONB containment query with a simpler
+        # event_type + generated_at dedup check that avoids multi-key JSONB issues.
+        stmt = select(Insight).where(
+            Insight.event_type == event.event_type,
+            Insight.generated_at >= cutoff,
         )
+        existing = session.execute(stmt).scalars().first()
+        # Narrow to the same entity_id via Python check on affected_entities
         if existing is not None:
-            continue
+            entities = existing.affected_entities or []
+            if any(e.get("id") == event.entity_id for e in entities):
+                continue
 
         title = _build_title(event)
         narrative = event.narrative
