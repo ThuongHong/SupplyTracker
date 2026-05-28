@@ -13,15 +13,12 @@ function deriveEntityContext(
 
   const portMatch = path.match(/^\/ports\/(.+)$/)
   if (portMatch) {
-    return { entity_type: 'port', entity_id: decodeURIComponent(portMatch[1]) }
+    return [{ entity_type: 'port', entity_id: decodeURIComponent(portMatch[1]) }]
   }
 
   const cpMatch = path.match(/^\/chokepoints\/(.+)$/)
   if (cpMatch) {
-    return {
-      entity_type: 'chokepoint',
-      entity_id: decodeURIComponent(cpMatch[1]),
-    }
+    return [{ entity_type: 'chokepoint', entity_id: decodeURIComponent(cpMatch[1]) }]
   }
 
   return undefined

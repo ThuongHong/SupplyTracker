@@ -241,11 +241,7 @@ export interface CoverageResponse {
 
 export interface ChatRequest {
   message: string
-  entity_context?: {
-    entity_type: string
-    entity_id: string
-    entity_name?: string
-  }
+  entity_context?: Array<{ entity_type: string; entity_id: string; entity_name?: string }>
 }
 
 export interface ChatChunk {
@@ -277,4 +273,46 @@ export interface NewsListResponse {
 export interface SyncResponse {
   task_id: string
   source: string
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+export interface EntityDashboardCharts {
+  vessel_mix?: Array<{ time: string; anchored: number; moored: number; underway: number }>
+  dwell_hours?: Array<{ time: string; value: number }>
+  throughput?: Array<{ time: string; value: number }>
+  vessel_count?: Array<{ time: string; value: number }>
+  median_speed?: Array<{ time: string; value: number }>
+  risk_trend?: Array<{ time: string; value: number }>
+  forecast?: Array<{ time: string; value: number; lo?: number; hi?: number }>
+  indices?: Array<{ time: string; fbx?: number; wci?: number }>
+  bunker?: Array<{ time: string; value: number }>
+}
+
+export interface EntityDashboardStats {
+  risk_latest?: number | null
+  risk_30d_mean?: number | null
+  risk_30d_max?: number | null
+  dwell_latest?: number | null
+  vessel_count_latest?: number | null
+  fbx_pct_7d?: number | null
+}
+
+export interface DashboardDisruption {
+  source_entity_id: string
+  source_entity_name: string
+  target_entity_id: string
+  target_entity_name: string
+  severity: string
+  confidence: number
+  explanation: string
+  status: string
+}
+
+export interface DashboardResponse {
+  entity: { type: string; id: string; name: string }
+  window: string
+  charts: EntityDashboardCharts
+  stats: EntityDashboardStats
+  disruptions: DashboardDisruption[]
 }
