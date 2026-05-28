@@ -144,6 +144,7 @@ class GoogleNewsCollector(BaseCollector):
             logger.error("GoogleNewsCollector prune failed — %s", msg)
             errors.append(msg)
 
+        session.commit()
         return CollectionResult(rows=total_rows, errors=errors)
 
     def _fetch_and_upsert(
