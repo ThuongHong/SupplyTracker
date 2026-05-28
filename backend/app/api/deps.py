@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security
@@ -8,18 +7,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db.session import get_db as _get_db
+from app.db.session import get_db
 
 # ---------------------------------------------------------------------------
 # Database dependency
 # ---------------------------------------------------------------------------
 
-DbSession = Annotated[Session, Depends(_get_db)]
-
-
-def get_db() -> Iterator[Session]:
-    """Re-export `get_db` as a FastAPI dependency for direct use in routers."""
-    yield from _get_db()
+DbSession = Annotated[Session, Depends(get_db)]
 
 
 # ---------------------------------------------------------------------------

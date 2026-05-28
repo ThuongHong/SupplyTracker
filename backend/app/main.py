@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -77,6 +77,8 @@ def create_app() -> FastAPI:
     async def unhandled_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
+        if isinstance(exc, HTTPException):
+            raise exc
         logger.exception("Unhandled exception for %s %s", request.method, request.url)
         return JSONResponse(
             status_code=500,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any
 
@@ -30,6 +31,7 @@ class RateLimiter:
     def __init__(self, requests_per_minute: int = 60) -> None:
         self.requests_per_minute = requests_per_minute
         self._client: redis_lib.Redis[Any] | None = None
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -39,19 +41,21 @@ class RateLimiter:
         """Return a lazily-initialised Redis client, or *None* on error."""
         if self._client is not None:
             return self._client
-        try:
-            settings = get_settings()
-            self._client = redis_lib.Redis.from_url(
-                str(settings.redis_url),
-                decode_responses=True,
-                socket_connect_timeout=1,
-                socket_timeout=1,
-            )
-            # Verify connectivity immediately so we fail fast at startup.
-            self._client.ping()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("RateLimiter: Redis unavailable — failing open. Error: %s", exc)
-            self._client = None
+        with self._lock:
+            if self._client is not None:
+                return self._client
+            try:
+                settings = get_settings()
+                client = redis_lib.Redis.from_url(
+                    str(settings.redis_url),
+                    decode_responses=True,
+                    socket_connect_timeout=1,
+                    socket_timeout=1,
+                )
+                client.ping()
+                self._client = client
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("RateLimiter: Redis unavailable — failing open. Error: %s", exc)
         return self._client
 
     @staticmethod
