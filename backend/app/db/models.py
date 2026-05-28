@@ -22,6 +22,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -397,3 +398,26 @@ class LLMUsageLog(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(16))
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class NewsItem(Base):
+    __tablename__ = "news_item"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    entity_type: Mapped[str] = mapped_column(String(16))
+    entity_id: Mapped[str] = mapped_column(String(64))
+    url_hash: Mapped[str] = mapped_column(String(64))
+    url: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(128))
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str] = mapped_column(String(8), server_default="en")
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("entity_type", "entity_id", "url_hash", name="uq_news_item_entity_url"),
+        Index("ix_news_item_entity_published_at", "entity_type", "entity_id", "published_at"),
+    )

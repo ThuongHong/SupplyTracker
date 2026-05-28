@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     decision_brief_cache_ttl_s: int = 3600
     chat_rate_limit_per_5min: int = 20
 
+    # News feed
+    news_fetch_enabled: bool = True
+    news_max_items_per_entity: int = 30
+
     # SMTP
     smtp_host: str
     smtp_port: int
