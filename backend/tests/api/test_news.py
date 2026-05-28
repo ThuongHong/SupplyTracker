@@ -1,7 +1,7 @@
 """Contract tests for GET /api/v1/entities/{entity_type}/{entity_id}/news."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from app.db.session import get_db
 from app.main import app
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -48,10 +47,10 @@ def _make_news_item(
     item.url = "http://example.com/news/1"
     item.title = "Port congestion spike"
     item.source = "Reuters"
-    item.published_at = published_at or datetime(2026, 5, 1, tzinfo=timezone.utc)
+    item.published_at = published_at or datetime(2026, 5, 1, tzinfo=UTC)
     item.summary = "Port congestion increased."
     item.language = "en"
-    item.fetched_at = datetime(2026, 5, 2, tzinfo=timezone.utc)
+    item.fetched_at = datetime(2026, 5, 2, tzinfo=UTC)
     return item
 
 
@@ -229,7 +228,7 @@ class TestNewsEndpointValidation:
         port = _make_port_mock()
         newer = _make_news_item(
             item_id=2,
-            published_at=datetime(2026, 5, 20, tzinfo=timezone.utc),
+            published_at=datetime(2026, 5, 20, tzinfo=UTC),
         )
         # The mock only returns the newer item (simulating DB filter behaviour)
         _build_port_session(mock_session, port=port, news_items=[newer])

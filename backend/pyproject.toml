@@ -65,7 +65,7 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["dashscope.*", "statsforecast.*", "geoalchemy2.*"]
+module = ["dashscope.*", "statsforecast.*", "geoalchemy2.*", "feedparser.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

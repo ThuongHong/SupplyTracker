@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.collectors.google_news import GoogleNewsCollector
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,7 +74,7 @@ class TestGoogleNewsHappyPath:
         port = _make_port()
 
         def query_side_effect(model):
-            from app.db.models import Port, Chokepoint
+            from app.db.models import Chokepoint, Port
             mock_q = MagicMock()
             if model is Port:
                 mock_q.all.return_value = [port]
@@ -144,7 +143,7 @@ class TestGoogleNewsDedup:
 
         # Only ports, no chokepoints
         def query_side_effect(model):
-            from app.db.models import Port, Chokepoint
+            from app.db.models import Chokepoint, Port
             mock_q = MagicMock()
             if model is Port:
                 mock_q.all.return_value = [port]
@@ -199,7 +198,7 @@ class TestGoogleNewsCrossEntity:
         cp = _make_chokepoint()
 
         def query_side_effect(model):
-            from app.db.models import Port, Chokepoint
+            from app.db.models import Chokepoint, Port
             mock_q = MagicMock()
             if model is Port:
                 mock_q.all.return_value = [port]

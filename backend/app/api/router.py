@@ -7,10 +7,10 @@ from app.api.routes.chokepoints import router as chokepoints_router
 from app.api.routes.health import router as health_router
 from app.api.routes.indices import router as indices_router
 from app.api.routes.insights import router as insights_router
+from app.api.routes.news import router as news_router
 from app.api.routes.ports import router as ports_router
 from app.api.routes.risk import router as risk_router
 from app.api.routes.stats import router as stats_router
-from app.api.routes.news import router as news_router
 from app.api.routes.story import router as story_router
 from app.api.routes.sync import router as sync_router
 

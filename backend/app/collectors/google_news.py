@@ -137,7 +137,7 @@ class GoogleNewsCollector(BaseCollector):
             result = session.execute(
                 delete(NewsItem).where(NewsItem.published_at < cutoff)
             )
-            pruned = result.rowcount
+            pruned = result.rowcount  # type: ignore[attr-defined]
             logger.info("GoogleNewsCollector pruned %d old news items", pruned)
         except Exception as exc:
             msg = f"prune error: {exc}"
@@ -166,8 +166,8 @@ class GoogleNewsCollector(BaseCollector):
             raise RuntimeError(f"feedparser.parse failed for {url!r}: {exc}") from exc
 
         if getattr(feed, "bozo", False) and not feed.entries:
-            exc = getattr(feed, "bozo_exception", None)
-            raise RuntimeError(f"Feed parse error for {entity_id!r}: {exc}")
+            bozo_exc = getattr(feed, "bozo_exception", None)
+            raise RuntimeError(f"Feed parse error for {entity_id!r}: {bozo_exc}")
 
         entries = feed.entries
         if not entries:
@@ -219,6 +219,6 @@ class GoogleNewsCollector(BaseCollector):
                 )
             )
             result = session.execute(stmt)
-            inserted += result.rowcount
+            inserted += result.rowcount  # type: ignore[attr-defined]
 
         return inserted
