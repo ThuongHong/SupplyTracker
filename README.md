@@ -62,3 +62,26 @@ cd frontend && npm test
 - [ ] Chatbot widget: floating button opens SSE stream against `/api/v1/chat`
 - [ ] `GET /api/v1/health` returns `{"status":"ok"}`
 - [ ] Flower at :5555 shows registered tasks
+
+## News feed
+
+Port and chokepoint detail pages include a **News** tab in the Event Log card that surfaces Google News RSS articles fetched every 6 hours (no API key required).
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `NEWS_FETCH_ENABLED` | `true` | Set to `false` to disable all news collection |
+| `NEWS_MAX_ITEMS_PER_ENTITY` | `30` | Cap on items stored per entity per collection run |
+
+## Sync button
+
+The **Sync** button on port/chokepoint detail pages triggers a force-fetch of all collectors (`POST /sync/all`). It is only visible when an admin bearer token is configured.
+
+The frontend reads the token from `VITE_SYNC_BEARER_TOKEN` (set at build time in `.env`) or from `localStorage.getItem('sync_token')` at runtime. The token must match `SYNC_BEARER_TOKEN` in the backend `.env`.
+
+```bash
+# .env
+SYNC_BEARER_TOKEN=my-strong-random-token
+
+# frontend .env (or set at build time)
+VITE_SYNC_BEARER_TOKEN=my-strong-random-token
+```
