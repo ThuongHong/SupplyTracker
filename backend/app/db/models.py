@@ -419,5 +419,5 @@ class NewsItem(Base):
 
     __table_args__ = (
         UniqueConstraint("entity_type", "entity_id", "url_hash", name="uq_news_item_entity_url"),
-        Index("ix_news_item_entity_published_at", "entity_type", "entity_id", "published_at"),
+        Index("ix_news_item_entity_published_at", "entity_type", "entity_id", text("published_at DESC")),
     )
