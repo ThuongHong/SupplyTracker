@@ -25,3 +25,4 @@ def make_celery() -> Celery:
 
 
 celery_app = make_celery()
+celery_app.autodiscover_tasks(["app.tasks"])

@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from celery import chord, group, shared_task
+from celery import chord, group
 
 from app.tasks.celery_app import celery_app
 
