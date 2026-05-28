@@ -100,6 +100,17 @@ def collect_bunker(self: Any) -> dict[str, Any]:
         raise self.retry(exc=exc) from exc
 
 
+@celery_app.task(name="collect.news", bind=True, max_retries=3, default_retry_delay=120)
+def collect_news(self: Any) -> dict[str, Any]:
+    """Collect Google News items per port and chokepoint."""
+    try:
+        from app.collectors.google_news import GoogleNewsCollector
+        return _run_collector(GoogleNewsCollector)
+    except Exception as exc:
+        logger.error("collect_news failed, retrying: %s", exc)
+        raise self.retry(exc=exc) from exc
+
+
 # ── chord callback ─────────────────────────────────────────────────────────────
 
 @celery_app.task(name="collect._on_collect_all_done")
@@ -137,6 +148,7 @@ def collect_all() -> str:
         collect_fbx.s(),
         collect_wci.s(),
         collect_bunker.s(),
+        collect_news.s(),
     )
     pipeline = chord(individual, _on_collect_all_done.s())
     result = pipeline.delay()

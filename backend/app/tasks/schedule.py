@@ -44,6 +44,11 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour="8", minute="0"),
         "options": {"queue": "collection"},
     },
+    "collect-news-6h": {
+        "task": "collect.news",
+        "schedule": crontab(minute="15", hour="*/6"),
+        "options": {"queue": "collection"},
+    },
     # ── Scoring / risk pipeline ────────────────────────────────────
     # Runs 30 min after the top of each hour so PortWatch data is ingested
     "score-pipeline-hourly": {
