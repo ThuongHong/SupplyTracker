@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["sync"])
 
-_VALID_SOURCES = {"portwatch", "fred", "fbx", "wci", "bunker", "all"}
+_VALID_SOURCES = {"portwatch", "fred", "fbx", "wci", "bunker", "news", "all"}
 
 
 @router.post("/sync/{source}", response_model=SyncResponse)
@@ -31,6 +31,7 @@ def trigger_sync(
         collect_bunker,
         collect_fbx,
         collect_fred,
+        collect_news,
         collect_portwatch,
         collect_wci,
     )
@@ -41,6 +42,7 @@ def trigger_sync(
         "fbx": collect_fbx,
         "wci": collect_wci,
         "bunker": collect_bunker,
+        "news": collect_news,
         "all": collect_all,
     }
 

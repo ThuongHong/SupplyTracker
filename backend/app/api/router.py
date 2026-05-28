@@ -10,6 +10,7 @@ from app.api.routes.insights import router as insights_router
 from app.api.routes.ports import router as ports_router
 from app.api.routes.risk import router as risk_router
 from app.api.routes.stats import router as stats_router
+from app.api.routes.news import router as news_router
 from app.api.routes.story import router as story_router
 from app.api.routes.sync import router as sync_router
 
@@ -21,6 +22,7 @@ router.include_router(chokepoints_router)
 router.include_router(indices_router)
 router.include_router(risk_router)
 router.include_router(story_router)
+router.include_router(news_router)
 router.include_router(insights_router)
 router.include_router(stats_router)
 router.include_router(sync_router)
