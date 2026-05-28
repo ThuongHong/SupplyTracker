@@ -12,6 +12,8 @@ class ChokepointListItem(BaseModel):
     id: int
     name: str
     severity: str | None = None
+    risk_score: float | None = None
+    updated_at: str | None = None
 
     model_config = {"from_attributes": True}
 

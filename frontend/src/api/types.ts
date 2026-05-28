@@ -39,6 +39,8 @@ export interface PortSummary {
   country: string
   region: string | null
   severity: string | null
+  risk_score?: number | null
+  updated_at?: string | null
 }
 
 export interface RiskSnapshotEmbed {
@@ -78,6 +80,8 @@ export interface ChokepointSummary {
   id: number
   name: string
   severity: string | null
+  risk_score?: number | null
+  updated_at?: string | null
 }
 
 export interface ChokepointDetail extends ChokepointSummary {

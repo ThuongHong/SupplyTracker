@@ -41,11 +41,8 @@ def _latest_chokepoint_severity(db: DbSession, entity_id: str) -> str | None:
 
 def _bulk_latest_chokepoint_scores(
     db: DbSession, entity_ids: list[str]
-) -> dict[str, tuple[str | None, float | None]]:
-    """Return {entity_id: (severity, score)} for the latest score of each given entity_id.
-
-    Replaces N individual queries with 2 queries (max-time subquery + join).
-    """
+) -> dict[str, tuple[str | None, float | None, Any]]:
+    """Return {entity_id: (severity, score, as_of)} for the latest score of each entity_id."""
     if not entity_ids:
         return {}
 
@@ -67,7 +64,7 @@ def _bulk_latest_chokepoint_scores(
         )
         .all()
     )
-    return {r.entity_id: (r.severity, r.score) for r in rows}
+    return {r.entity_id: (r.severity, r.score, r.as_of) for r in rows}
 
 
 def _chokepoint_entity_id(cp: Chokepoint) -> str:
@@ -167,9 +164,15 @@ def list_chokepoints(
     items: list[ChokepointListItem] = []
     for cp in chokepoints:
         entity_id = _chokepoint_entity_id(cp)
-        sev, _score = score_map.get(entity_id, (None, None))
+        sev, score, as_of = score_map.get(entity_id, (None, None, None))
         items.append(
-            ChokepointListItem(id=cp.id, name=cp.name, severity=sev)
+            ChokepointListItem(
+                id=cp.id,
+                name=cp.name,
+                severity=sev,
+                risk_score=float(score) if score is not None else None,
+                updated_at=as_of.isoformat() if as_of is not None else None,
+            )
         )
 
     return ChokepointsResponse(

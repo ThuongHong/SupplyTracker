@@ -36,7 +36,9 @@ def _latest_severity(db: Any, entity_id: str) -> str | None:
     return row[0] if row else None
 
 
-def _bulk_latest_scores(db: Any, entity_ids: list[str]) -> dict[str, tuple[str | None, float | None]]:
+def _bulk_latest_scores(
+    db: Any, entity_ids: list[str]
+) -> dict[str, tuple[str | None, float | None, Any]]:
     if not entity_ids:
         return {}
 
@@ -58,7 +60,7 @@ def _bulk_latest_scores(db: Any, entity_ids: list[str]) -> dict[str, tuple[str |
         )
         .all()
     )
-    return {r.entity_id: (r.severity, r.score) for r in rows}
+    return {r.entity_id: (r.severity, r.score, r.as_of) for r in rows}
 
 
 def _port_entity_id(port: Port) -> str:
@@ -161,7 +163,7 @@ def list_ports(
     items: list[PortListItem] = []
     for p in ports:
         entity_id = _port_entity_id(p)
-        sev, _score = score_map.get(entity_id, (None, None))
+        sev, score, as_of = score_map.get(entity_id, (None, None, None))
         items.append(
             PortListItem(
                 id=p.id,
@@ -170,6 +172,8 @@ def list_ports(
                 country=p.country,
                 region=p.region,
                 severity=sev,
+                risk_score=float(score) if score is not None else None,
+                updated_at=as_of.isoformat() if as_of is not None else None,
             )
         )
 
