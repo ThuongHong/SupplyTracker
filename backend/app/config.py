@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     vite_api_base_url: HttpUrl
 
     @classmethod
-    def settings_customise_sources(  # type: ignore[override]
+    def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
         init_settings: Any,
@@ -114,4 +114,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]  # args come from env/dotenv
+    return Settings()

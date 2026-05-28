@@ -82,7 +82,7 @@ def run_forecast(self: Any) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("forecast.run_forecast fatal error: %s", exc)
         session.rollback()
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
     finally:
         try:
             next(db_gen)

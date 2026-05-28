@@ -65,6 +65,10 @@ plugins = ["pydantic.mypy"]
 module = ["dashscope.*", "statsforecast.*", "geoalchemy2.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "app.tasks.*"
+disable_error_code = ["untyped-decorator", "no-untyped-call", "no-untyped-def", "no-any-return"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"

@@ -53,7 +53,7 @@ def collect_portwatch(self: Any) -> dict[str, Any]:
         return _run_collector(PortWatchCollector)
     except Exception as exc:
         logger.error("collect_portwatch failed, retrying: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(name="collect.fred", bind=True, max_retries=3, default_retry_delay=120)
@@ -64,7 +64,7 @@ def collect_fred(self: Any) -> dict[str, Any]:
         return _run_collector(FREDCollector)
     except Exception as exc:
         logger.error("collect_fred failed, retrying: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(name="collect.fbx", bind=True, max_retries=3, default_retry_delay=120)
@@ -75,7 +75,7 @@ def collect_fbx(self: Any) -> dict[str, Any]:
         return _run_collector(FBXCollector)
     except Exception as exc:
         logger.error("collect_fbx failed, retrying: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(name="collect.wci", bind=True, max_retries=3, default_retry_delay=120)
@@ -86,7 +86,7 @@ def collect_wci(self: Any) -> dict[str, Any]:
         return _run_collector(WCICollector)
     except Exception as exc:
         logger.error("collect_wci failed, retrying: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(name="collect.bunker", bind=True, max_retries=3, default_retry_delay=120)
@@ -97,7 +97,7 @@ def collect_bunker(self: Any) -> dict[str, Any]:
         return _run_collector(BunkerCollector)
     except Exception as exc:
         logger.error("collect_bunker failed, retrying: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 # ── chord callback ─────────────────────────────────────────────────────────────
@@ -140,4 +140,4 @@ def collect_all() -> str:
     )
     pipeline = chord(individual, _on_collect_all_done.s())
     result = pipeline.delay()
-    return result.id
+    return str(result.id)

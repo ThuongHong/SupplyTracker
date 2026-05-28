@@ -4,8 +4,8 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import ClassVar
+from datetime import UTC, datetime
+from typing import Any, ClassVar
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -27,7 +27,7 @@ class BaseCollector(ABC):
 
     def run(self, session: Session) -> CollectionResult:
         log = CollectionLog(
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             source=self.source_name,
         )
         session.add(log)
@@ -45,7 +45,7 @@ class BaseCollector(ABC):
             log.error = str(exc)
             result.errors.append(str(exc))
         finally:
-            log.finished_at = datetime.now(timezone.utc)
+            log.finished_at = datetime.now(UTC)
             session.commit()
 
         return result
@@ -62,7 +62,7 @@ class BaseCollector(ABC):
         *,
         max_retries: int = 3,
         base_delay: float = 1.0,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> httpx.Response:
         _RETRYABLE_STATUSES = {429, 503, 504}
         last_exc: Exception | None = None
@@ -142,7 +142,7 @@ class BaseCollector(ABC):
         observed_at: datetime,
         status: str = "success",
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         stmt = (
             pg_insert(DataCoverage)
@@ -182,7 +182,7 @@ class BaseCollector(ABC):
         if existing is not None and existing.first_observed_at is not None:
             first = existing.first_observed_at
             if first.tzinfo is None:
-                first = first.replace(tzinfo=timezone.utc)
+                first = first.replace(tzinfo=UTC)
             expected = (now - first).days
             missing = max(0, expected - existing.observed_rows)
             existing.expected_days = expected
@@ -192,7 +192,7 @@ class BaseCollector(ABC):
 
 def _compute_freshness(observed_at: datetime, now: datetime) -> str:
     if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(tzinfo=timezone.utc)
+        observed_at = observed_at.replace(tzinfo=UTC)
     age_hours = (now - observed_at).total_seconds() / 3600
     if age_hours < 24:
         return "fresh"

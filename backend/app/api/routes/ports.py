@@ -65,7 +65,7 @@ def _geom_to_coords(geom: Any) -> list[float] | None:
     if geom is None:
         return None
     try:
-        from geoalchemy2.shape import to_shape  # type: ignore[import-untyped]
+        from geoalchemy2.shape import to_shape
         shape = to_shape(geom)
         return [shape.x, shape.y]
     except Exception:  # noqa: BLE001
@@ -112,8 +112,8 @@ def list_ports(
         ]
         # Map entity_ids back to port ids: entity_id = locode or str(id)
         # Filter by locode match OR numeric id match
-        from sqlalchemy import cast, or_
         from sqlalchemy import String as SaString
+        from sqlalchemy import cast, or_
         base_q = base_q.filter(
             or_(
                 Port.locode.in_(matching_ids),

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 import pandas as pd
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.db.models import EntityRiskForecast, PortWatchMetric
+
+logger = logging.getLogger(__name__)
 
 _SCHEMA_VERSION = "1.0"
 _MODEL_NAME = "AutoETS"
@@ -21,7 +21,7 @@ def _smape(actual: list[float], predicted: list[float]) -> float:
     if not actual:
         return 0.0
     errors = []
-    for a, p in zip(actual, predicted):
+    for a, p in zip(actual, predicted, strict=False):
         denom = (abs(a) + abs(p)) / 2
         if denom > 0:
             errors.append(abs(a - p) / denom)
@@ -174,7 +174,7 @@ def generate_forecast(
 
             # mape: mean absolute percentage error (skip rows where actual == 0)
             mape_errors = []
-            for a, p in zip(bt_actual, bt_pred):
+            for a, p in zip(bt_actual, bt_pred, strict=False):
                 if a != 0:
                     mape_errors.append(abs((a - p) / a) * 100)
             mape_val = float(sum(mape_errors) / len(mape_errors)) if mape_errors else 0.0
@@ -186,7 +186,7 @@ def generate_forecast(
                 lo80 = bt_forecast[lo80_col].tolist()
                 hi80 = bt_forecast[hi80_col].tolist()
                 covered = sum(
-                    1 for a, lo, hi in zip(bt_actual, lo80, hi80) if lo <= a <= hi
+                    1 for a, lo, hi in zip(bt_actual, lo80, hi80, strict=False) if lo <= a <= hi
                 )
                 coverage_80 = covered / len(bt_actual) if bt_actual else 0.80
             else:
@@ -257,7 +257,7 @@ def generate_forecast(
 
     upsert_vals: dict[str, Any] = {
         "forecast_key": forecast_key,
-        "created_at": datetime.now(timezone.utc),  # Fix #4: stamp explicitly rather than rely on server_default
+        "created_at": datetime.now(UTC),  # Fix #4: stamp explicitly rather than rely on server_default
         "entity_type": entity_type,
         "entity_id": entity_id,
         "entity_name": entity_name,

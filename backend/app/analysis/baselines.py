@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -22,10 +22,10 @@ def compute_baselines(
     mean and stdev are None when no data is present.
     """
     window_start = datetime(
-        as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=timezone.utc
+        as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=UTC
     ) - timedelta(days=window_days)
     window_end = datetime(
-        as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=timezone.utc
+        as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=UTC
     )
 
     rows = (

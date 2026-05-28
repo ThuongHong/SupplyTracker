@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -70,7 +70,7 @@ class BunkerCollector(BaseCollector):
                 price = float(row.get("price", row.get("value", 0.0)))
                 if not date_str:
                     continue
-                time_dt = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                time_dt = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
                 self._upsert_bunker_price(
                     session,
                     time=time_dt,

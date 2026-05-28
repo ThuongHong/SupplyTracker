@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Strait of Hormuz",
+    "latitude": 26.55,
+    "longitude": 56.25
+  },
+  {
+    "name": "Strait of Malacca",
+    "latitude": 1.25,
+    "longitude": 103.62
+  },
+  {
+    "name": "Suez Canal",
+    "latitude": 30.58,
+    "longitude": 32.33
+  },
+  {
+    "name": "Bab-el-Mandeb",
+    "latitude": 12.60,
+    "longitude": 43.45
+  },
+  {
+    "name": "Panama Canal",
+    "latitude": 9.08,
+    "longitude": -79.68
+  },
+  {
+    "name": "Strait of Gibraltar",
+    "latitude": 35.97,
+    "longitude": -5.62
+  },
+  {
+    "name": "Strait of Dover",
+    "latitude": 51.10,
+    "longitude": 1.30
+  },
+  {
+    "name": "Lombok Strait",
+    "latitude": -8.75,
+    "longitude": 115.75
+  }
+]

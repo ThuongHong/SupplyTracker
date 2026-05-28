@@ -3,7 +3,8 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -37,7 +38,7 @@ class FBXCollector(BaseCollector):
     def _parse_and_upsert(self, session: Session, resp: httpx.Response) -> int:
         # TODO: update HTML parsing logic once target URL format is confirmed
         content_type = resp.headers.get("content-type", "")
-        rows: list[dict] = []
+        rows: list[dict[str, Any]] = []
 
         if "json" in content_type:
             data = resp.json()
@@ -60,7 +61,7 @@ class FBXCollector(BaseCollector):
                 route = row.get("route", "GLOBAL")
                 if not date_str or not value_str:
                     continue
-                time_dt = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                time_dt = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
                 value = float(value_str)
                 index_name = f"FBX_{route}"
                 self._upsert_freight_index(session, time=time_dt, index_name=index_name, value=value)

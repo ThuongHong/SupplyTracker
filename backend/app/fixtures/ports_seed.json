@@ -1,0 +1,114 @@
+[
+  {
+    "locode": "SGSIN",
+    "name": "Singapore",
+    "country": "Singapore",
+    "region": "Asia",
+    "latitude": 1.264,
+    "longitude": 103.820
+  },
+  {
+    "locode": "CNSHA",
+    "name": "Shanghai",
+    "country": "China",
+    "region": "Asia",
+    "latitude": 31.230,
+    "longitude": 121.473
+  },
+  {
+    "locode": "NLRTM",
+    "name": "Rotterdam",
+    "country": "Netherlands",
+    "region": "Europe",
+    "latitude": 51.950,
+    "longitude": 4.140
+  },
+  {
+    "locode": "CNSZX",
+    "name": "Shenzhen",
+    "country": "China",
+    "region": "Asia",
+    "latitude": 22.543,
+    "longitude": 114.058
+  },
+  {
+    "locode": "CNNGB",
+    "name": "Ningbo-Zhoushan",
+    "country": "China",
+    "region": "Asia",
+    "latitude": 29.867,
+    "longitude": 121.550
+  },
+  {
+    "locode": "KRPUS",
+    "name": "Busan",
+    "country": "South Korea",
+    "region": "Asia",
+    "latitude": 35.100,
+    "longitude": 129.040
+  },
+  {
+    "locode": "CNGZH",
+    "name": "Guangzhou",
+    "country": "China",
+    "region": "Asia",
+    "latitude": 23.130,
+    "longitude": 113.260
+  },
+  {
+    "locode": "HKHKG",
+    "name": "Hong Kong",
+    "country": "Hong Kong",
+    "region": "Asia",
+    "latitude": 22.290,
+    "longitude": 114.165
+  },
+  {
+    "locode": "CNTAO",
+    "name": "Qingdao",
+    "country": "China",
+    "region": "Asia",
+    "latitude": 36.066,
+    "longitude": 120.383
+  },
+  {
+    "locode": "CNTXG",
+    "name": "Tianjin",
+    "country": "China",
+    "region": "Asia",
+    "latitude": 39.002,
+    "longitude": 117.704
+  },
+  {
+    "locode": "AEJEA",
+    "name": "Jebel Ali",
+    "country": "United Arab Emirates",
+    "region": "Middle East",
+    "latitude": 24.990,
+    "longitude": 55.062
+  },
+  {
+    "locode": "MYPKG",
+    "name": "Port Klang",
+    "country": "Malaysia",
+    "region": "Asia",
+    "latitude": 3.000,
+    "longitude": 101.400
+  },
+  {
+    "locode": "BEANR",
+    "name": "Antwerp",
+    "country": "Belgium",
+    "region": "Europe",
+    "latitude": 51.260,
+    "longitude": 4.420
+  },
+  {
+    "locode": "USLAX",
+    "name": "Los Angeles",
+    "country": "United States",
+    "region": "Americas",
+    "latitude": 33.729,
+    "longitude": -118.272
+  }
+]

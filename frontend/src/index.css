@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  /* Smooth theme transitions */
+  * {
+    @apply transition-colors duration-150;
+  }
+
+  /* Remove transition on map elements to prevent flickering */
+  .maplibregl-map,
+  .maplibregl-map * {
+    transition: none !important;
+  }
+}
+
+@layer utilities {
+  .sidebar-width {
+    width: 240px;
+  }
+
+  .sidebar-width-collapsed {
+    width: 64px;
+  }
+}

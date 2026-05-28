@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from typing import Any
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -29,13 +30,14 @@ _ERROR_MESSAGE = (
 # ---------------------------------------------------------------------------
 
 
-def _fetch_entity_context(session: Session, entity_context: list[dict]) -> str:
+def _fetch_entity_context(session: Session, entity_context: list[dict[str, Any]]) -> str:
     """Build a grounded context string from the DB for each requested entity."""
     lines: list[str] = []
 
     for entity in entity_context:
         entity_type = entity.get("type", "")
         entity_id = entity.get("id", "")
+        risk_row: PortRiskScore | ChokepointRiskScore | None = None
 
         if entity_type == "port":
             risk_row = (
@@ -99,7 +101,7 @@ def _fetch_entity_context(session: Session, entity_context: list[dict]) -> str:
 def stream_chat_response(
     session: Session,
     user_message: str,
-    entity_context: list[dict],
+    entity_context: list[dict[str, Any]],
 ) -> Generator[str, None, None]:
     """Validate input, build grounded context, stream LLM response as SSE chunks."""
 
@@ -129,8 +131,7 @@ def stream_chat_response(
     # 4. Stream LLM response
     try:
         stream = chat_completion(messages, stream=True)
-        for chunk in stream:  # type: ignore[union-attr]
-            yield chunk
+        yield from stream  # type: ignore[misc]
 
         # 5. Write usage log (no token counts for streaming)
         log = LLMUsageLog(

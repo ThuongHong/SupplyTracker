@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import cast, desc, func, select
 from sqlalchemy import Date as SaDate
+from sqlalchemy import cast, desc, func, select
 
 from app.api.deps import DbSession
 from app.db.models import Chokepoint, ChokepointRiskScore, PortWatchMetric
@@ -70,11 +71,11 @@ def _chokepoint_entity_id(cp: Chokepoint) -> str:
     return str(cp.id)
 
 
-def _geom_to_polygon_coords(geom: object) -> list[list[float]] | None:
+def _geom_to_polygon_coords(geom: Any) -> list[list[float]] | None:
     if geom is None:
         return None
     try:
-        from geoalchemy2.shape import to_shape  # type: ignore[import-untyped]
+        from geoalchemy2.shape import to_shape
         shape = to_shape(geom)
         coords = list(shape.exterior.coords)
         return [[c[0], c[1]] for c in coords]
@@ -175,7 +176,7 @@ def get_chokepoint_breakdown(chokepoint_id: int, db: DbSession) -> ChokepointBre
 
     # Query PortWatchMetric where entity_type="chokepoint" and entity_id matches
     # Limit to the last _BREAKDOWN_DAYS days at the DB level to avoid a full-table scan
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=_BREAKDOWN_DAYS)
+    cutoff = datetime.now(tz=UTC) - timedelta(days=_BREAKDOWN_DAYS)
 
     # Group by date (cast observed_at to date) and metric_name (category)
     rows = (
@@ -198,8 +199,8 @@ def get_chokepoint_breakdown(chokepoint_id: int, db: DbSession) -> ChokepointBre
     )
 
     # Aggregate by date — collect up to _BREAKDOWN_DAYS unique dates
-    date_map: dict = defaultdict(lambda: defaultdict(int))
-    dates_seen: list = []
+    date_map: dict[Any, Any] = defaultdict(lambda: defaultdict(int))
+    dates_seen: list[Any] = []
 
     for obs_date, metric_name, cnt in rows:
         if obs_date not in date_map:

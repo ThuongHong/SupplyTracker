@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -79,7 +79,7 @@ def detect_events(
       - sustained_streak: metric above/below mean for 5+ consecutive days
     """
     events: list[RiskStoryEvent] = []
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     date_str = snapshot.snapshot_date.isoformat()
     entity_type = snapshot.entity_type
     entity_id = snapshot.entity_id
@@ -192,7 +192,7 @@ def detect_events(
             snapshot.snapshot_date.month,
             snapshot.snapshot_date.day,
             23, 59, 59,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         )
         cutoff_start = cutoff_end - timedelta(days=5)
         recent_rows = (

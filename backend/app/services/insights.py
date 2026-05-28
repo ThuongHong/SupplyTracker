@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ def materialize_insights(
     Returns the list of newly created Insight rows.
     """
     created: list[Insight] = []
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     cutoff = now - timedelta(hours=24)
 
     for event in events:

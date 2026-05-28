@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
@@ -43,7 +44,7 @@ def chat(
 ) -> EventSourceResponse:
     """Stream a chat response as Server-Sent Events."""
 
-    async def event_generator() -> AsyncGenerator[dict, None]:
+    async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
         # stream_chat_response is a sync generator doing blocking I/O (LLM HTTP calls).
         # Drive it via run_in_executor so the event loop is never blocked.
         loop = asyncio.get_event_loop()

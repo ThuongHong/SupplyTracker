@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 from celery import shared_task
 
@@ -16,7 +17,7 @@ _COMMIT_BATCH_SIZE = 5
 
 
 @shared_task(name="narrate.fill_narratives")
-def fill_narratives(batch_size: int = 20) -> dict:
+def fill_narratives(batch_size: int = 20) -> dict[str, Any]:
     """Fill narrative_llm for up to batch_size insights that lack one."""
     processed = 0
     errors = 0
@@ -43,7 +44,7 @@ def fill_narratives(batch_size: int = 20) -> dict:
 
                 insight.narrative_llm = response.content
                 insight.narrative_model = response.model
-                insight.narrative_generated_at = datetime.now(tz=timezone.utc)
+                insight.narrative_generated_at = datetime.now(tz=UTC)
 
                 log = LLMUsageLog(
                     feature="narrative",

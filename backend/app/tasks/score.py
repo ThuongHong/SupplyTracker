@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-def _get_session():  # type: ignore[return]
+def _get_session() -> tuple[Any, Any]:
     """Open a DB session and return (session, db_gen) for manual lifecycle."""
     from app.db.session import get_db
     db_gen = get_db()
@@ -198,4 +198,4 @@ def run_pipeline(self: Any) -> dict[str, Any]:
 
     except Exception as exc:
         logger.error("score.run_pipeline failed, retrying: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

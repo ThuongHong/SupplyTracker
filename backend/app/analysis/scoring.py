@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,7 @@ def _get_latest_metric(
 ) -> PortWatchMetric | None:
     """Query the latest PortWatchMetric on or before as_of_date."""
     cutoff = datetime(
-        as_of_date.year, as_of_date.month, as_of_date.day, 23, 59, 59, tzinfo=timezone.utc
+        as_of_date.year, as_of_date.month, as_of_date.day, 23, 59, 59, tzinfo=UTC
     )
     return (
         session.query(PortWatchMetric)
@@ -162,6 +162,9 @@ def score_entity(
 
         # Use z_30 for scoring; if unavailable fall back to z_90
         z_for_score = z_30 if z_30 is not None else z_90
+        if z_for_score is None:
+            missing_components.append(comp.name)
+            continue
 
         # Negate z for "higher_is_better" so high value = lower risk
         if comp.direction == "higher_is_better":
@@ -197,8 +200,8 @@ def score_entity(
         "component_weights": {c.name: c.weight for c in applicable},
     }
 
-    now = datetime.now(tz=timezone.utc)
-    as_of_dt = datetime(as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=timezone.utc)
+    now = datetime.now(tz=UTC)
+    as_of_dt = datetime(as_of_date.year, as_of_date.month, as_of_date.day, tzinfo=UTC)
     freshness_status = "ok" if missing_fraction == 0 else ("degraded" if missing_fraction <= max_missing else "insufficient")
 
     # Upsert RiskFeatureSnapshot
@@ -237,7 +240,7 @@ def score_entity(
     )
     snap_result = session.execute(snap_stmt)
     session.flush()
-    snapshot_row = snap_result.fetchone()
+    snap_result.fetchone()
 
     # Build a detached RiskFeatureSnapshot for return
     snapshot = RiskFeatureSnapshot(

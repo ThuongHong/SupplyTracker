@@ -121,6 +121,6 @@ def _stream(
         stream=True,
     )
     for chunk in stream_response:
-        delta = chunk.choices[0].delta if chunk.choices else None
+        delta = chunk.choices[0].delta if chunk.choices else None  # type: ignore[union-attr]
         if delta and delta.content:
             yield delta.content

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -74,7 +74,7 @@ class FREDCollector(BaseCollector):
                 continue
 
             obs_date = obs["date"]
-            time_dt = datetime.fromisoformat(obs_date).replace(tzinfo=timezone.utc)
+            time_dt = datetime.fromisoformat(obs_date).replace(tzinfo=UTC)
 
             self._upsert_freight_index(
                 session,

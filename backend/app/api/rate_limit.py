@@ -30,14 +30,14 @@ class RateLimiter:
 
     def __init__(self, requests_per_minute: int = 60) -> None:
         self.requests_per_minute = requests_per_minute
-        self._client: redis_lib.Redis[Any] | None = None
+        self._client: redis_lib.Redis[str] | None = None  # type: ignore[type-arg]
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _get_client(self) -> redis_lib.Redis[Any] | None:
+    def _get_client(self) -> redis_lib.Redis[str] | None:  # type: ignore[type-arg]
         """Return a lazily-initialised Redis client, or *None* on error."""
         if self._client is not None:
             return self._client

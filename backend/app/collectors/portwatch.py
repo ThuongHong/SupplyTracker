@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
+from typing import Any
 
 import httpx
 from geoalchemy2.elements import WKTElement
@@ -47,7 +48,7 @@ class PortWatchCollector(BaseCollector):
         except Exception as exc:
             logger.warning("Chokepoint bootstrap failed: %s", exc)
 
-    def _upsert_ports(self, session: Session, ports_data: list[dict]) -> list[str]:
+    def _upsert_ports(self, session: Session, ports_data: list[dict[str, Any]]) -> list[str]:
         errors: list[str] = []
         for item in ports_data:
             lat = item.get("latitude") or 0.0
@@ -84,7 +85,7 @@ class PortWatchCollector(BaseCollector):
         session.flush()
         return errors
 
-    def _upsert_chokepoints(self, session: Session, cp_data: list[dict]) -> None:
+    def _upsert_chokepoints(self, session: Session, cp_data: list[dict[str, Any]]) -> None:
         for item in cp_data:
             polygon_wkt = item.get("polygon_wkt")
             if polygon_wkt:
@@ -112,7 +113,7 @@ class PortWatchCollector(BaseCollector):
             client, "GET", f"{base_url}/metrics", params={"date": today}
         )
         resp.raise_for_status()
-        rows_data: list[dict] = resp.json()
+        rows_data: list[dict[str, Any]] = resp.json()
 
         total = 0
         errors: list[str] = []
@@ -128,7 +129,7 @@ class PortWatchCollector(BaseCollector):
                 logger.warning("Failed to process metric row %s: %s", item, exc)
                 # Record coverage failure so last_collection_status="error"
                 try:
-                    observed_at = datetime.fromisoformat(today).replace(tzinfo=timezone.utc)
+                    observed_at = datetime.fromisoformat(today).replace(tzinfo=UTC)
                     self._upsert_coverage(
                         session,
                         entity_type,
@@ -145,9 +146,9 @@ class PortWatchCollector(BaseCollector):
         return CollectionResult(rows=total, errors=errors)
 
     def _process_metric_row(
-        self, session: Session, item: dict, date_str: str
+        self, session: Session, item: dict[str, Any], date_str: str
     ) -> int:
-        observed_at = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+        observed_at = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
         entity_type = item["entity_type"]
         entity_id = item["entity_id"]
         entity_name = item.get("entity_name", "")
@@ -156,7 +157,7 @@ class PortWatchCollector(BaseCollector):
         unit = item.get("unit")
         source_entity_id = item.get("source_entity_id")
         metadata = item.get("metadata")
-        collected_at = datetime.now(timezone.utc)
+        collected_at = datetime.now(UTC)
 
         self._upsert_metric(
             session,
@@ -188,7 +189,7 @@ class PortWatchCollector(BaseCollector):
         metric_value: float,
         unit: str | None,
         source_entity_id: str | None,
-        metadata_: dict | None,
+        metadata_: dict[str, Any] | None,
         collected_at: datetime,
     ) -> None:
         stmt = (

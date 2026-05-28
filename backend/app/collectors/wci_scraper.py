@@ -3,7 +3,8 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -37,7 +38,7 @@ class WCICollector(BaseCollector):
     def _parse_and_upsert(self, session: Session, resp: httpx.Response) -> int:
         # TODO: update HTML parsing logic once target URL format is confirmed
         content_type = resp.headers.get("content-type", "")
-        rows: list[dict] = []
+        rows: list[dict[str, Any]] = []
 
         if "json" in content_type:
             data = resp.json()
@@ -59,7 +60,7 @@ class WCICollector(BaseCollector):
                 value_str = row.get("value", "")
                 if not date_str or not value_str:
                     continue
-                time_dt = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                time_dt = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
                 value = float(value_str)
                 self._upsert_freight_index(session, time=time_dt, value=value)
                 count += 1

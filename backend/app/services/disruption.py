@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -72,7 +71,7 @@ def propagate_chokepoint_event(
     if not target_ports:
         return []
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     written: list[DisruptionPropagation] = []
 
     for port_id in target_ports:
