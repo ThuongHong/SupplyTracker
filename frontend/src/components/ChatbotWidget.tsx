@@ -24,6 +24,19 @@ function deriveEntityContext(
   return undefined
 }
 
+// ─── External API ────────────────────────────────────────────────────────────
+
+type EntityContextItem = { entity_type: string; entity_id: string; entity_name?: string }
+
+export function openChatWithPrompt(
+  prompt: string,
+  entityContext: EntityContextItem[],
+): void {
+  window.dispatchEvent(
+    new CustomEvent('supplytracker:open-chat', { detail: { prompt, entityContext } }),
+  )
+}
+
 // ─── Message types ───────────────────────────────────────────────────────────
 
 interface Message {
@@ -43,6 +56,7 @@ export default function ChatbotWidget() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<boolean>(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const pendingContextRef = useRef<EntityContextItem[] | null>(null)
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -56,11 +70,24 @@ export default function ChatbotWidget() {
     }
   }, [open])
 
+  // Listen for external open-chat events
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { prompt, entityContext } = (e as CustomEvent<{ prompt: string; entityContext: EntityContextItem[] }>).detail
+      setOpen(true)
+      setInput(prompt)
+      pendingContextRef.current = entityContext
+    }
+    window.addEventListener('supplytracker:open-chat', handler)
+    return () => window.removeEventListener('supplytracker:open-chat', handler)
+  }, [])
+
   const handleSend = useCallback(async () => {
     const text = input.trim()
     if (!text || streaming) return
 
-    const entityContext = deriveEntityContext(window.location.hash)
+    const entityContext = pendingContextRef.current ?? deriveEntityContext(window.location.hash)
+    pendingContextRef.current = null
 
     const userMsg: Message = { role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
@@ -78,7 +105,7 @@ export default function ChatbotWidget() {
     try {
       const request: ChatRequest = {
         message: text,
-        entity_context: entityContext,
+        entity_context: entityContext ?? [],
       }
 
       let assembled = ''
