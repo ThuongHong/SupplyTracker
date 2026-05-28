@@ -23,11 +23,13 @@ RUN mkdir -p /app/backend
 # Copy source (no-op if backend/ is empty or not yet scaffolded — Bundle 3 fills this)
 COPY backend/ /app/backend/
 
-# Install in editable mode; falls back gracefully if pyproject.toml doesn't exist yet
-RUN pip install --no-cache-dir -e /app/backend \
+# Install in editable mode with dev extras (pytest, ruff, mypy, respx)
+RUN pip install --no-cache-dir -e "/app/backend[dev]" \
     || echo 'backend not yet scaffolded — install at runtime'
 
 USER app
+
+ENV PATH="/home/app/.local/bin:$PATH"
 
 EXPOSE 8000
 

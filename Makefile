@@ -24,7 +24,7 @@ shell-fe: ## Open a sh shell in the frontend container
 	docker compose exec frontend sh
 
 test: ## Run the backend test suite with pytest
-	docker compose exec -w /app/backend backend pytest -q
+	docker compose exec -w /app/backend backend python -m pytest -q
 
 lint: ## Run ruff and mypy against the backend
 	docker compose exec -w /app/backend backend ruff check . && docker compose exec -w /app/backend backend mypy app

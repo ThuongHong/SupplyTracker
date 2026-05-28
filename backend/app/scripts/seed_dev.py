@@ -63,11 +63,12 @@ _BUNKER_FUEL_TYPES: list[tuple[str, float, float]] = [
 def _circle_polygon_wkt(lon: float, lat: float, radius_deg: float = 0.5) -> str:
     steps = 32
     points: list[str] = []
-    for i in range(steps + 1):
+    for i in range(steps):
         angle = 2 * math.pi * i / steps
         points.append(
             f"{lon + radius_deg * math.cos(angle)} {lat + radius_deg * math.sin(angle)}"
         )
+    points.append(points[0])  # close the ring exactly
     return f"POLYGON(({', '.join(points)}))"
 
 

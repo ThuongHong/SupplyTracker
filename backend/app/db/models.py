@@ -35,7 +35,7 @@ class Port(Base):
     __tablename__ = "ports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    locode: Mapped[str | None] = mapped_column(String(16), index=True, nullable=True)
+    locode: Mapped[str | None] = mapped_column(String(16), index=True, unique=True, nullable=True)
     name: Mapped[str] = mapped_column(String(128))
     country: Mapped[str] = mapped_column(String(64))
     region: Mapped[str | None] = mapped_column(String(64), nullable=True)
