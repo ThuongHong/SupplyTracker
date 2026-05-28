@@ -108,5 +108,5 @@
 - [x] 12.1 Ruff + mypy clean on `backend/`
 - [x] 12.2 `pytest` green: collectors, scoring, events, forecasts, safety, route contracts
 - [x] 12.3 `vitest` green: components + page logic helpers
-- [ ] 12.4 `make up` brings stack up; manual smoke checklist: dashboard renders w/ seeded data, chokepoint breakdown loads, chatbot streams, decision brief generates, coverage banner correct, forecast endpoint returns either data or `insufficient` status
+- [x] 12.4 `make up` brings stack up; manual smoke checklist: dashboard renders w/ seeded data, chokepoint breakdown loads, chatbot streams, decision brief generates, coverage banner correct, forecast endpoint returns either data or `insufficient` status
 - [x] 12.5 Update root `README.md` with full run instructions and a screenshot of the seeded dashboard
