@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from typing import Any
 
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.db.models import ChokepointRiskScore, LLMUsageLog, PortRiskScore, RiskStoryEvent
+from app.db.models import LLMUsageLog
 from app.llm.client import chat_completion
+from app.llm.grounding import build_grounding_context
 from app.llm.prompts import CHATBOT_SYSTEM, build_messages
 from app.llm.safety import validate_input
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Refusal / error messages
@@ -26,71 +29,30 @@ _ERROR_MESSAGE = (
 )
 
 # ---------------------------------------------------------------------------
-# Context builder
+# Context normalisation
+# ---------------------------------------------------------------------------
+
+
+def _normalise_entity_context(
+    raw: list[dict[str, Any]] | dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Accept both a list (new shape) and a single dict (legacy); always return a list."""
+    if isinstance(raw, dict):
+        logger.warning(
+            "entity_context received as single dict (deprecated); wrapping in list"
+        )
+        return [raw]
+    return raw
+
+
+# ---------------------------------------------------------------------------
+# Context builder (delegates to grounding.py)
 # ---------------------------------------------------------------------------
 
 
 def _fetch_entity_context(session: Session, entity_context: list[dict[str, Any]]) -> str:
-    """Build a grounded context string from the DB for each requested entity."""
-    lines: list[str] = []
-
-    for entity in entity_context:
-        entity_type = entity.get("type", "")
-        entity_id = entity.get("id", "")
-        risk_row: PortRiskScore | ChokepointRiskScore | None = None
-
-        if entity_type == "port":
-            risk_row = (
-                session.query(PortRiskScore)
-                .filter(PortRiskScore.entity_id == entity_id)
-                .order_by(desc(PortRiskScore.as_of))
-                .first()
-            )
-            if risk_row:
-                lines.append(
-                    f"Port '{risk_row.entity_name}' (id={entity_id}): "
-                    f"risk_score={risk_row.score}, severity={risk_row.severity}, "
-                    f"as_of={risk_row.as_of.isoformat()}"
-                )
-            else:
-                lines.append(f"Port id={entity_id}: no risk score data available.")
-
-        elif entity_type == "chokepoint":
-            risk_row = (
-                session.query(ChokepointRiskScore)
-                .filter(ChokepointRiskScore.entity_id == entity_id)
-                .order_by(desc(ChokepointRiskScore.as_of))
-                .first()
-            )
-            if risk_row:
-                lines.append(
-                    f"Chokepoint '{risk_row.entity_name}' (id={entity_id}): "
-                    f"risk_score={risk_row.score}, severity={risk_row.severity}, "
-                    f"as_of={risk_row.as_of.isoformat()}"
-                )
-            else:
-                lines.append(f"Chokepoint id={entity_id}: no risk score data available.")
-
-        # Recent events (up to 3) for this entity regardless of type
-        events = (
-            session.query(RiskStoryEvent)
-            .filter(
-                RiskStoryEvent.entity_id == entity_id,
-                RiskStoryEvent.entity_type == entity_type,
-            )
-            .order_by(desc(RiskStoryEvent.event_time))
-            .limit(3)
-            .all()
-        )
-        if events:
-            lines.append(f"  Recent events for {entity_type} id={entity_id}:")
-            for ev in events:
-                lines.append(
-                    f"    - [{ev.severity}] {ev.event_type} at {ev.event_time.isoformat()}: "
-                    f"{ev.narrative}"
-                )
-
-    return "\n".join(lines) if lines else "No entity context data available."
+    """Build a rich grounded context string from the DB for each requested entity."""
+    return build_grounding_context(session, entity_context)
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +85,8 @@ def stream_chat_response(
         return
 
     # 2. Build grounded context
-    context = _fetch_entity_context(session, entity_context)
+    normalised = _normalise_entity_context(entity_context)
+    context = _fetch_entity_context(session, normalised)
 
     # 3. Build messages
     messages = build_messages(CHATBOT_SYSTEM, user_message, context)
