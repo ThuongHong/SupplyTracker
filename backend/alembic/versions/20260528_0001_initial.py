@@ -439,11 +439,8 @@ def upgrade() -> None:
         sa.Column("attention_level", sa.String(16), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_insight_generated_at_desc",
-        "insight",
-        [sa.text("generated_at DESC")],
-        unique=False,
+    op.execute(
+        "CREATE INDEX ix_insight_generated_at_desc ON insight (generated_at DESC)"
     )
     op.create_index(
         "ix_insight_attention_level",
