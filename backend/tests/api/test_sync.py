@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 from app.db.session import get_db
 from app.main import app
 
-
 VALID_TOKEN = "test-secret-token"
 
 
@@ -80,3 +79,55 @@ class TestSync:
         )
 
         assert resp.status_code == 422
+
+
+class TestPerEntitySync:
+    def test_sync_port_backfills_and_tracks(self, mock_session, client):
+        from app.collectors.base import CollectionResult
+
+        port = MagicMock()
+        port.portid = "port1000"
+        port.name = "Test Port"
+        port.is_tracked = False
+        mock_session.query.return_value.filter.return_value.first.return_value = port
+
+        with patch(
+            "app.api.routes.sync.PortWatchCollector.sync_port",
+            return_value=CollectionResult(rows=273, errors=[]),
+        ):
+            resp = client.post(
+                "/api/v1/sync/port/port1000",
+                headers={"Authorization": f"Bearer {VALID_TOKEN}"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["rows"] == 273
+        assert data["is_tracked"] is True
+        assert port.is_tracked is True  # flag flipped
+
+    def test_sync_unknown_port_returns_404(self, mock_session, client):
+        mock_session.query.return_value.filter.return_value.first.return_value = None
+        resp = client.post(
+            "/api/v1/sync/port/nope999",
+            headers={"Authorization": f"Bearer {VALID_TOKEN}"},
+        )
+        assert resp.status_code == 404
+
+    def test_sync_port_requires_bearer(self, client):
+        resp = client.post("/api/v1/sync/port/port1000")
+        assert resp.status_code == 401
+
+    def test_untrack_port_clears_flag(self, mock_session, client):
+        port = MagicMock()
+        port.portid = "port1000"
+        port.is_tracked = True
+        mock_session.query.return_value.filter.return_value.first.return_value = port
+
+        resp = client.post(
+            "/api/v1/untrack/port/port1000",
+            headers={"Authorization": f"Bearer {VALID_TOKEN}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["is_tracked"] is False
+        assert port.is_tracked is False

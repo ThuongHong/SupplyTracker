@@ -121,9 +121,17 @@ def list_chokepoints(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     severity: str | None = Query(None),
+    q: str | None = Query(None, description="Case-insensitive name search"),
+    tracked: bool | None = Query(None, description="Filter by tracked flag"),
 ) -> ChokepointsResponse:
-    """List chokepoints with optional severity filter, paginated."""
+    """List chokepoints with optional search, tracked, and severity filters."""
     base_q = db.query(Chokepoint)
+
+    if q:
+        base_q = base_q.filter(Chokepoint.name.ilike(f"%{q}%"))
+
+    if tracked is not None:
+        base_q = base_q.filter(Chokepoint.is_tracked.is_(tracked))
 
     if severity is not None:
         latest_sq = (
@@ -168,7 +176,9 @@ def list_chokepoints(
         items.append(
             ChokepointListItem(
                 id=cp.id,
+                chokepointid=cp.chokepointid,
                 name=cp.name,
+                is_tracked=cp.is_tracked,
                 severity=sev,
                 risk_score=float(score) if score is not None else None,
                 updated_at=as_of.isoformat() if as_of is not None else None,
@@ -245,7 +255,9 @@ def get_chokepoint(chokepoint_id: int, db: DbSession) -> ChokepointDetail:
 
     return ChokepointDetail(
         id=cp.id,
+        chokepointid=cp.chokepointid,
         name=cp.name,
+        is_tracked=cp.is_tracked,
         severity=sev,
         coordinates=coords,
         lat=lat,

@@ -2,7 +2,7 @@
 
 Cadences
 --------
-- PortWatch collector  : every hour  (fresh maritime data)
+- PortWatch refresh    : daily at 05:00 UTC (latest day for TRACKED entities)
 - FRED collector       : daily at 06:00 UTC  (economics data updated daily)
 - FBX scraper          : daily at 07:00 UTC  (Freightos Baltic Index)
 - WCI scraper          : daily at 07:30 UTC  (World Container Index)
@@ -19,9 +19,11 @@ from app.tasks.celery_app import celery_app
 
 celery_app.conf.beat_schedule = {
     # ── Collectors ────────────────────────────────────────────────
-    "collect-portwatch-hourly": {
+    "collect-portwatch-daily": {
         "task": "collect.portwatch",
-        "schedule": crontab(minute="0"),          # top of every hour
+        # Latest day for tracked entities; PortWatch updates ~weekly so daily
+        # is ample. Runs before the hourly scoring pass picks it up.
+        "schedule": crontab(hour="5", minute="0"),
         "options": {"queue": "collection"},
     },
     "collect-fred-daily": {

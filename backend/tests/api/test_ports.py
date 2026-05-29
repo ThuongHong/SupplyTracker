@@ -29,6 +29,8 @@ def client(mock_session):
 def _make_port(port_id: int = 1) -> MagicMock:
     p = MagicMock()
     p.id = port_id
+    p.portid = "port1201"
+    p.is_tracked = True
     p.locode = "SGSIN"
     p.name = "Port of Singapore"
     p.country = "SG"
@@ -80,6 +82,30 @@ class TestPortsList:
         assert data["total"] == 1
         assert len(data["items"]) == 1
         assert data["items"][0]["name"] == "Port of Singapore"
+
+    def test_search_and_tracked_filters_accepted(self, mock_session, client):
+        """GET /ports?q=..&tracked=true applies filters and returns 200."""
+        port = _make_port()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query  # q + tracked chain back
+        mock_query.count.return_value = 1
+        mock_query.offset.return_value.limit.return_value.all.return_value = [port]
+
+        mock_score_query = MagicMock()
+        mock_score_query.join.return_value = mock_score_query
+        mock_score_query.all.return_value = []
+
+        def query_side_effect(model, *args):
+            from app.db.models import Port
+            return mock_query if model is Port else mock_score_query
+
+        mock_session.query.side_effect = query_side_effect
+
+        resp = client.get("/api/v1/ports?q=singapore&tracked=true")
+        assert resp.status_code == 200
+        assert resp.json()["items"][0]["portid"] == "port1201"
+        # both filters were applied (search + tracked)
+        assert mock_query.filter.call_count >= 2
 
     def test_invalid_severity_returns_empty_list(self, mock_session, client):
         """Severity filter with no matches → 200 with empty items list."""

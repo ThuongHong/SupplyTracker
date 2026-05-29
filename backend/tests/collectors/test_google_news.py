@@ -18,6 +18,7 @@ def _make_session() -> MagicMock:
 def _make_port(locode: str = "SGSIN", name: str = "Port of Singapore") -> MagicMock:
     p = MagicMock()
     p.locode = locode
+    p.portid = "port1201"
     p.name = name
     return p
 
@@ -87,6 +88,7 @@ class TestGoogleNewsHappyPath:
         def query_side_effect(model):
             from app.db.models import Chokepoint, Port
             mock_q = MagicMock()
+            mock_q.filter.return_value = mock_q  # is_tracked filter chains back
             if model is Port:
                 mock_q.all.return_value = [port]
             elif model is Chokepoint:
@@ -171,6 +173,7 @@ class TestGoogleNewsDedup:
         def query_side_effect(model):
             from app.db.models import Chokepoint, Port
             mock_q = MagicMock()
+            mock_q.filter.return_value = mock_q  # is_tracked filter chains back
             if model is Port:
                 mock_q.all.return_value = [port]
             elif model is Chokepoint:
@@ -223,6 +226,7 @@ class TestGoogleNewsCrossEntity:
         def query_side_effect(model):
             from app.db.models import Chokepoint, Port
             mock_q = MagicMock()
+            mock_q.filter.return_value = mock_q  # is_tracked filter chains back
             if model is Port:
                 mock_q.all.return_value = [port]
             elif model is Chokepoint:

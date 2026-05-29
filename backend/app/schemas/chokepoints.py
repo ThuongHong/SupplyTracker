@@ -10,7 +10,9 @@ from app.schemas.ports import MetricPoint, RiskSnapshotEmbed
 
 class ChokepointListItem(BaseModel):
     id: int
+    chokepointid: str
     name: str
+    is_tracked: bool = False
     severity: str | None = None
     risk_score: float | None = None
     updated_at: str | None = None
@@ -20,7 +22,9 @@ class ChokepointListItem(BaseModel):
 
 class ChokepointDetail(BaseModel):
     id: int
+    chokepointid: str
     name: str
+    is_tracked: bool = False
     severity: str | None = None
     coordinates: list[list[float]] | None = None
     lat: float | None = None

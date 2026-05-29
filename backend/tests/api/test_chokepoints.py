@@ -30,6 +30,8 @@ def client(mock_session):
 def _make_chokepoint(cp_id: int = 1) -> MagicMock:
     cp = MagicMock()
     cp.id = cp_id
+    cp.chokepointid = "chokepoint5"
+    cp.is_tracked = True
     cp.name = "Strait of Malacca"
     cp.geom = None
     return cp
