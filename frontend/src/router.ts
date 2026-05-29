@@ -18,6 +18,7 @@ const LEGACY_HASHES = new Set([
   '#/analytics',
   '#/insights',
   '#/vessels',
+  '#/market',
 ])
 
 /** Parse raw hash string (e.g. "#/ports/123") into a Route. */

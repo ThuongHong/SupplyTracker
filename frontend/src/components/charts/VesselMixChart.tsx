@@ -26,7 +26,12 @@ const series = [
 
 export function VesselMixChart({ data }: Props) {
   if (data.length === 0) {
-    return <DataState status="empty" emptyMessage="No vessel data" />
+    return (
+      <DataState
+        status="empty"
+        emptyMessage="No vessel-type breakdown yet — re-sync this entity"
+      />
+    )
   }
 
   const chartData = data.map((d) => ({

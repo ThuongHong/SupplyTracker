@@ -6,14 +6,16 @@ import { AreaChart } from '../components/ui/AreaChart'
 import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
 import { WindowPicker } from '../components/ui/WindowPicker'
+import { Tabs } from '../components/ui/Tabs'
 import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
 import { navigate } from '../router'
 import { fetchPort, fetchPortMetrics } from '../api/ports'
 import { fetchEntityDashboard } from '../api/dashboard'
-import { getSyncToken, syncPort } from '../api/sync'
+import { getSyncToken, syncPort, untrackPort } from '../api/sync'
 import { EventLog } from '../components/EventLog'
 import { VesselMixChart } from '../components/charts/VesselMixChart'
-import { RiskForecastChart } from '../components/charts/RiskForecastChart'
+import { AnomalyCard } from '../components/charts/AnomalyCard'
+import { EntitySummary } from '../components/charts/EntitySummary'
 import { IndicesPanel } from '../components/charts/IndicesPanel'
 import type { PortDetail, MetricPoint, DashboardResponse } from '../api/types'
 
@@ -131,7 +133,9 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [untracking, setUntracking] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [tab, setTab] = useState<'overview' | 'summary' | 'events'>('overview')
 
   const [window, setWindow] = useState<'7d' | '30d' | '90d'>(() => {
     return (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
@@ -186,6 +190,17 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       setReloadKey((k) => k + 1)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const handleUntrack = async () => {
+    if (!port || untracking) return
+    setUntracking(true)
+    try {
+      await untrackPort(port.portid)
+      setReloadKey((k) => k + 1)
+    } finally {
+      setUntracking(false)
     }
   }
 
@@ -256,31 +271,66 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         </div>
         <WindowPicker value={window} onChange={handleWindowChange} />
         {canSync && (
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
-            aria-label={isTracked ? 'Untrack port' : 'Sync port data'}
-          >
-            {syncing ? (
-              <>
-                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                Syncing…
-              </>
-            ) : isTracked ? (
-              <>
-                <IconStarFilled className="w-4 h-4 text-amber-500" />
-                Tracked · Re-sync
-              </>
-            ) : (
-              <>
-                <IconStar className="w-4 h-4 text-gray-400" />
-                Sync data
-              </>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSync}
+              disabled={syncing || untracking}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+              aria-label={isTracked ? 'Re-sync port data' : 'Sync port data'}
+            >
+              {syncing ? (
+                <>
+                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Syncing…
+                </>
+              ) : isTracked ? (
+                <>
+                  <IconStarFilled className="w-4 h-4 text-amber-500" />
+                  Re-sync
+                </>
+              ) : (
+                <>
+                  <IconStar className="w-4 h-4 text-gray-400" />
+                  Sync data
+                </>
+              )}
+            </button>
+            {isTracked && (
+              <button
+                onClick={handleUntrack}
+                disabled={syncing || untracking}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-label="Untrack port"
+              >
+                {untracking ? 'Untracking…' : 'Untrack'}
+              </button>
             )}
-          </button>
+          </div>
         )}
       </div>
+
+      {/* Tabs */}
+      <Tabs
+        tabs={[
+          { key: 'overview', label: 'Overview' },
+          { key: 'summary', label: 'AI Summary' },
+          { key: 'events', label: 'Events' },
+        ]}
+        active={tab}
+        onChange={(k) => setTab(k as 'overview' | 'summary' | 'events')}
+      />
+
+      {tab === 'summary' && (
+        <EntitySummary entityType="port" entityId={id} window={window} reloadKey={reloadKey} />
+      )}
+
+      {tab === 'events' && (
+        <Card title="Event Log">
+          <EventLog entityType="port" entityId={id} />
+        </Card>
+      )}
+
+      {tab === 'overview' && <>
 
       {/* KPI Strip */}
       <KpiStrip port={port} />
@@ -302,14 +352,14 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         <MetricDrilldown portId={port.id} />
       </Card>
 
-      {/* Risk & Forecast from dashboard bundle */}
-      <Card title="Risk & Forecast">
+      {/* Throughput anomaly (z-score hypothesis) */}
+      <Card title="Throughput anomaly (z-score)">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
-          <RiskForecastChart
-            riskTrend={dashboard?.charts.risk_trend ?? []}
-            forecast={dashboard?.charts.forecast ?? []}
+          <AnomalyCard
+            series={dashboard?.charts.throughput ?? []}
+            stats={dashboard?.stats.anomaly}
           />
         )}
       </Card>
@@ -355,10 +405,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         </Card>
       )}
 
-      {/* Event Log */}
-      <Card title="Event Log">
-        <EventLog entityType="port" entityId={id} />
-      </Card>
+      </>}
     </div>
   )
 }

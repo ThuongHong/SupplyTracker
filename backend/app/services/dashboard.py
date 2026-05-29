@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
+import math
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
+from statistics import fmean, stdev
 from typing import Any
 
 from sqlalchemy import desc, func
@@ -19,11 +22,15 @@ from app.db.models import (
     PortWatchMetric,
 )
 from app.schemas.dashboard import (
+    AnomalyStats,
     DashboardResponse,
     DashboardStats,
     DisruptionItem,
     EntityInfo,
+    EntitySummaryResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 _WINDOW_DAYS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
 _FALLBACK_THROUGHPUT_METRIC = "vessels_in_port"
@@ -87,6 +94,123 @@ def _metric_series(
 def _window_start(window: str) -> datetime:
     days = _WINDOW_DAYS[window]
     return datetime.now(tz=UTC) - timedelta(days=days)
+
+
+# Throughput metric tested for anomalies / summarized per entity type.
+_THROUGHPUT_METRIC: dict[str, str] = {"port": "port_calls", "chokepoint": "transit_calls"}
+_MIN_BASELINE = 8
+
+
+def _norm_cdf(x: float) -> float:
+    """Standard-normal CDF via erf (no SciPy dependency)."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _anomaly_stats(series: list[dict[str, Any]], metric: str | None = None) -> AnomalyStats:
+    """Z-score hypothesis test of the latest point against its trailing baseline.
+
+    The latest value is excluded from the baseline so it is tested against history.
+    Returns null fields when there is too little history or zero variance.
+    """
+    if len(series) < _MIN_BASELINE + 1:
+        return AnomalyStats(metric=metric, baseline_n=max(len(series) - 1, 0))
+
+    values = [float(p["value"]) for p in series]
+    latest = values[-1]
+    baseline = values[:-1]
+    mean = fmean(baseline)
+    std = stdev(baseline)  # sample std; len(baseline) >= 8
+
+    if std <= 0:
+        return AnomalyStats(
+            metric=metric, latest=round(latest, 2), mean=round(mean, 2),
+            std=0.0, baseline_n=len(baseline), anomaly_level="low",
+        )
+
+    z = (latest - mean) / std
+    p = 2.0 * (1.0 - _norm_cdf(abs(z)))
+    az = abs(z)
+    level = "high" if az >= 2.5 else "elevated" if az >= 1.5 else "low"
+
+    return AnomalyStats(
+        metric=metric,
+        latest=round(latest, 2),
+        mean=round(mean, 2),
+        std=round(std, 4),
+        z_score=round(z, 3),
+        p_value=round(p, 4),
+        anomaly_level=level,
+        baseline_n=len(baseline),
+    )
+
+
+def build_entity_summary(
+    session: Session, entity_type: str, entity_id: str, window: str
+) -> EntitySummaryResponse | None:
+    """Per-entity AI summary grounded in throughput trend + z-score anomaly stats."""
+    if entity_type == "port":
+        dash = build_port_dashboard(session, entity_id, window)
+    else:
+        dash = build_chokepoint_dashboard(session, entity_id, window)
+    if dash is None:
+        return None
+
+    stats = dash.stats.anomaly or AnomalyStats(metric=_THROUGHPUT_METRIC.get(entity_type))
+    narrative = _summary_narrative(dash.entity.name, window, stats, dash.stats.risk_latest)
+    return EntitySummaryResponse(
+        entity=dash.entity, window=window, narrative=narrative, stats=stats
+    )
+
+
+def _summary_narrative(
+    name: str, window: str, stats: AnomalyStats, risk_latest: float | None
+) -> str:
+    """LLM summary of one entity's throughput/anomaly picture, with a fallback."""
+
+    def _fallback() -> str:
+        if stats.z_score is None:
+            return (
+                f"Not enough recent throughput history for {name} to run a "
+                f"probability estimate over the last {window}."
+            )
+        direction = "above" if stats.z_score >= 0 else "below"
+        parts = [
+            f"Over the last {window}, {name}'s latest throughput ({stats.metric}) "
+            f"sits {abs(stats.z_score):.2f}σ {direction} its trailing mean "
+            f"(z={stats.z_score:.2f}, p={stats.p_value:.3f}; {stats.anomaly_level} anomaly likelihood)."
+        ]
+        if risk_latest is not None:
+            parts.append(f"Latest composite risk score is {risk_latest:.2f}.")
+        return " ".join(parts)
+
+    try:
+        from app.llm.client import LLMResponse, chat_completion
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a maritime supply-chain analyst. In 2-3 sentences, "
+                    "summarize one entity's throughput situation from the given "
+                    "z-score statistics. Be factual and concise; do not invent numbers."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Entity: {name}. Window: {window}. Metric: {stats.metric}. "
+                    f"latest={stats.latest}, mean={stats.mean}, std={stats.std}, "
+                    f"z_score={stats.z_score}, p_value={stats.p_value}, "
+                    f"anomaly_level={stats.anomaly_level}, risk_latest={risk_latest}."
+                ),
+            },
+        ]
+        resp = chat_completion(messages)
+        if isinstance(resp, LLMResponse) and resp.content.strip():
+            return resp.content.strip()
+    except Exception:
+        logger.info("Entity summary LLM unavailable; using data-driven fallback.")
+    return _fallback()
 
 
 def _get_default_throughput_metric(session: Session) -> str:
@@ -303,6 +427,7 @@ def build_port_dashboard(
             dwell_latest=dwell_latest,
             vessel_count_latest=vessel_count_latest,
             fbx_pct_7d=_fbx_pct_7d(session),
+            anomaly=_anomaly_stats(throughput, throughput_metric),
         ),
         disruptions=disruptions,
     )
@@ -409,6 +534,7 @@ def build_chokepoint_dashboard(
             risk_30d_max=risk_30d_max,
             vessel_count_latest=vessel_count_latest,
             fbx_pct_7d=_fbx_pct_7d(session),
+            anomaly=_anomaly_stats(transit_volume, "transit_calls"),
         ),
         disruptions=disruptions,
     )

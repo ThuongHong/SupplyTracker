@@ -2,7 +2,7 @@
  * Tests for entity charts and chatbot context features:
  *  8.1 — fetchEntityDashboard (URL construction + response parsing)
  *  8.2 — WindowPicker (option rendering + onChange)
- *  8.3 — RiskForecastChart (band rendering + empty state)
+ *  8.3 — AnomalyCard (z-score stats + insufficient-data state)
  *  8.4 — openChatWithPrompt + AskAIButton
  */
 
@@ -146,53 +146,41 @@ describe('WindowPicker', () => {
   })
 })
 
-// ─── 8.3 — RiskForecastChart ─────────────────────────────────────────────────
+// ─── 8.3 — AnomalyCard ───────────────────────────────────────────────────────
 
-import { RiskForecastChart } from '../components/charts/RiskForecastChart'
+import { AnomalyCard } from '../components/charts/AnomalyCard'
 
-describe('RiskForecastChart', () => {
-  it('renders without crashing with risk + forecast data', () => {
-    const riskTrend = [
-      { time: '2026-05-01T00:00:00Z', value: 0.65 },
-      { time: '2026-05-02T00:00:00Z', value: 0.70 },
-    ]
-    const forecast = [
-      { time: '2026-05-10T00:00:00Z', value: 0.74, lo: 0.65, hi: 0.80 },
-    ]
-    const { container } = render(
-      <RiskForecastChart riskTrend={riskTrend} forecast={forecast} />,
-    )
-    expect(container.firstChild).not.toBeNull()
+describe('AnomalyCard', () => {
+  const series = [
+    { time: '2026-05-01T00:00:00Z', value: 60 },
+    { time: '2026-05-02T00:00:00Z', value: 46 },
+  ]
+
+  it('renders z-score, p-value and anomaly badge', () => {
+    const stats = {
+      metric: 'transit_calls',
+      latest: 46.4,
+      mean: 60.7,
+      std: 8.5,
+      z_score: -1.67,
+      p_value: 0.095,
+      anomaly_level: 'elevated' as const,
+      baseline_n: 88,
+    }
+    render(<AnomalyCard series={series} stats={stats} />)
+    expect(screen.getByText('-1.67')).toBeDefined()
+    expect(screen.getByText('0.095')).toBeDefined()
+    expect(screen.getByText('Elevated')).toBeDefined()
   })
 
-  it('shows empty state when no data', () => {
-    render(<RiskForecastChart riskTrend={[]} forecast={[]} />)
-    expect(screen.getByText(/no/i)).toBeDefined()
+  it('shows insufficient-data state when stats are null', () => {
+    render(<AnomalyCard series={series} stats={null} />)
+    expect(screen.getByText(/not enough history/i)).toBeDefined()
   })
 
-  it('shows "No risk data" message for empty state', () => {
-    render(<RiskForecastChart riskTrend={[]} forecast={[]} />)
-    expect(screen.getByText('No risk data')).toBeDefined()
-  })
-
-  it('renders with only riskTrend (no forecast)', () => {
-    const riskTrend = [
-      { time: '2026-05-01T00:00:00Z', value: 0.55 },
-    ]
-    const { container } = render(
-      <RiskForecastChart riskTrend={riskTrend} forecast={[]} />,
-    )
-    expect(container.firstChild).not.toBeNull()
-  })
-
-  it('renders with only forecast (no riskTrend)', () => {
-    const forecast = [
-      { time: '2026-05-10T00:00:00Z', value: 0.74, lo: 0.65, hi: 0.80 },
-    ]
-    const { container } = render(
-      <RiskForecastChart riskTrend={[]} forecast={forecast} />,
-    )
-    expect(container.firstChild).not.toBeNull()
+  it('shows insufficient-data state when z_score missing', () => {
+    render(<AnomalyCard series={series} stats={{ metric: 'x', baseline_n: 3 }} />)
+    expect(screen.getByText(/not enough history/i)).toBeDefined()
   })
 })
 

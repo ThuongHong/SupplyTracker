@@ -8,7 +8,14 @@ from fastapi.testclient import TestClient
 
 from app.db.session import get_db
 from app.main import app
-from app.schemas.dashboard import DashboardResponse, DashboardStats, DisruptionItem, EntityInfo
+from app.schemas.dashboard import (
+    AnomalyStats,
+    DashboardResponse,
+    DashboardStats,
+    DisruptionItem,
+    EntityInfo,
+    EntitySummaryResponse,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -218,4 +225,46 @@ class TestDashboard422InvalidEntityType:
         ):
             resp = client.get("/api/v1/entities/foo/bar/dashboard")
 
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Entity AI summary endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestEntitySummary:
+    def test_summary_happy_path(self, mock_session, client):
+        summary = EntitySummaryResponse(
+            entity=EntityInfo(type="port", id="SGSIN", name="Singapore"),
+            window="30d",
+            narrative="Throughput is elevated above its trailing mean.",
+            stats=AnomalyStats(
+                metric="port_calls", latest=140.0, mean=100.0, std=5.0,
+                z_score=8.0, p_value=0.0, anomaly_level="high", baseline_n=88,
+            ),
+        )
+        with patch(
+            "app.api.routes.dashboard.build_entity_summary",
+            return_value=summary,
+        ) as mock_build:
+            resp = client.get("/api/v1/entities/port/SGSIN/summary?window=30d")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["narrative"]
+        assert data["stats"]["anomaly_level"] == "high"
+        assert data["stats"]["z_score"] == 8.0
+        mock_build.assert_called_once()
+
+    def test_summary_unknown_entity_404(self, mock_session, client):
+        with patch(
+            "app.api.routes.dashboard.build_entity_summary",
+            return_value=None,
+        ):
+            resp = client.get("/api/v1/entities/port/ZZZ/summary")
+        assert resp.status_code == 404
+
+    def test_summary_invalid_entity_type_422(self, mock_session, client):
+        resp = client.get("/api/v1/entities/foo/bar/summary")
         assert resp.status_code == 422

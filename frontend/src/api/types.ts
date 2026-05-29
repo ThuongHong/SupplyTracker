@@ -285,12 +285,24 @@ export interface EntityDashboardCharts {
   vessel_mix?: Array<{ time: string; anchored: number; moored: number; underway: number }>
   dwell_hours?: Array<{ time: string; value: number }>
   throughput?: Array<{ time: string; value: number }>
+  transit_volume?: Array<{ time: string; value: number }>
   vessel_count?: Array<{ time: string; value: number }>
   median_speed?: Array<{ time: string; value: number }>
   risk_trend?: Array<{ time: string; value: number }>
   forecast?: Array<{ time: string; value: number; lo?: number; hi?: number }>
   indices?: Array<{ time: string; fbx?: number; wci?: number }>
   bunker?: Array<{ time: string; value: number }>
+}
+
+export interface AnomalyStats {
+  metric?: string | null
+  latest?: number | null
+  mean?: number | null
+  std?: number | null
+  z_score?: number | null
+  p_value?: number | null
+  anomaly_level?: 'low' | 'elevated' | 'high' | null
+  baseline_n?: number | null
 }
 
 export interface EntityDashboardStats {
@@ -300,6 +312,14 @@ export interface EntityDashboardStats {
   dwell_latest?: number | null
   vessel_count_latest?: number | null
   fbx_pct_7d?: number | null
+  anomaly?: AnomalyStats | null
+}
+
+export interface EntitySummaryResponse {
+  entity: { type: string; id: string; name: string }
+  window: string
+  narrative: string
+  stats: AnomalyStats
 }
 
 export interface DashboardDisruption {

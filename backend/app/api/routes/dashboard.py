@@ -5,8 +5,12 @@ import logging
 from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from app.api.deps import DbSession
-from app.schemas.dashboard import DashboardResponse
-from app.services.dashboard import build_chokepoint_dashboard, build_port_dashboard
+from app.schemas.dashboard import DashboardResponse, EntitySummaryResponse
+from app.services.dashboard import (
+    build_chokepoint_dashboard,
+    build_entity_summary,
+    build_port_dashboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,4 +49,30 @@ def get_entity_dashboard(
         )
 
     response.headers["Cache-Control"] = "public, max-age=300"
+    return result
+
+
+@router.get(
+    "/entities/{entity_type}/{entity_id}/summary",
+    response_model=EntitySummaryResponse,
+)
+def get_entity_summary(
+    db: DbSession,
+    entity_type: str = Path(..., description="Entity type: 'port' or 'chokepoint'"),
+    entity_id: str = Path(..., description="Entity identifier (portid/locode for ports, slug for chokepoints)"),
+    window: str = Query("30d", pattern="^(7d|30d|90d)$", description="Time window: 7d, 30d, or 90d"),
+) -> EntitySummaryResponse:
+    """Return an AI summary + z-score anomaly stats for one entity's throughput."""
+    if entity_type not in _VALID_ENTITY_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid entity_type '{entity_type}'. Must be one of: {sorted(_VALID_ENTITY_TYPES)}",
+        )
+
+    result = build_entity_summary(db, entity_type, entity_id, window)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{entity_type.capitalize()} '{entity_id}' not found",
+        )
     return result

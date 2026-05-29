@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { AreaChart } from '../components/ui/AreaChart'
 import { DataState } from '../components/ui/DataState'
+import { MarketBrief } from '../components/MarketBrief'
 import { SeverityBadge, normalizeSeverity } from '../components/ui/Badge'
 import { StatusDot } from '../components/ui/StatusDot'
 import { navigate } from '../router'
@@ -366,6 +367,7 @@ export default function OverviewView() {
   const [insights, setInsights] = useState<InsightItem[]>([])
   const [insightsLoading, setInsightsLoading] = useState(true)
   const [trackedPortIds, setTrackedPortIds] = useState<Set<string>>(() => new Set(tracked.ports.getAll()))
+  const marketWindow = (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
 
   useEffect(() => tracked.ports.subscribe(() => setTrackedPortIds(new Set(tracked.ports.getAll()))), [])
 
@@ -449,6 +451,8 @@ export default function OverviewView() {
           </div>
         </aside>
       </section>
+
+      <MarketBrief window={marketWindow} />
 
       <MarketPanel indices={indices} loading={indicesLoading} />
 

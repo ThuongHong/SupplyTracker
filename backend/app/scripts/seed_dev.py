@@ -58,10 +58,13 @@ _PORT_METRICS: list[tuple[str, float, float, str | None]] = [
 ]
 
 _CHOKEPOINT_METRICS: list[tuple[str, float, float, str | None]] = [
-    ("transit_calls",        60.0,    15.0, "vessels"),
-    ("transit_capacity", 2000000.0, 400000.0, "tons"),
-    ("transit_container",    25.0,     8.0, "vessels"),
-    ("transit_tanker",       18.0,     6.0, "vessels"),
+    ("transit_calls",         60.0,    15.0, "vessels"),
+    ("transit_capacity",  2000000.0, 400000.0, "tons"),
+    ("transit_container",     25.0,     8.0, "vessels"),
+    ("transit_dry_bulk",      15.0,     5.0, "vessels"),
+    ("transit_general_cargo", 10.0,     4.0, "vessels"),
+    ("transit_roro",           6.0,     3.0, "vessels"),
+    ("transit_tanker",        18.0,     6.0, "vessels"),
 ]
 
 _FREIGHT_SERIES: list[tuple[str, float, float, str]] = [
