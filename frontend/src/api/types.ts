@@ -34,10 +34,12 @@ export interface HealthResponse {
 
 export interface PortSummary {
   id: number
+  portid: string
   locode: string | null
   name: string
   country: string
   region: string | null
+  is_tracked?: boolean
   severity: string | null
   risk_score?: number | null
   congestion_score?: number | null
@@ -81,8 +83,10 @@ export interface PortDetail extends PortSummary {
 
 export interface ChokepointSummary {
   id: number
+  chokepointid: string
   name: string
   region?: string | null
+  is_tracked?: boolean
   severity: string | null
   risk_score?: number | null
   transit_count?: number | null

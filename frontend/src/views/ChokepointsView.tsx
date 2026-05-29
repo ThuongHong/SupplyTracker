@@ -1,66 +1,86 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { DataState } from '../components/ui/DataState'
 import { SeverityBadge, normalizeSeverity } from '../components/ui/Badge'
 import { StatusDot } from '../components/ui/StatusDot'
 import { IconSearch } from '../components/ui/icons'
 import { navigate } from '../router'
 import { fetchChokepoints } from '../api/chokepoints'
+import { getSyncToken, syncChokepoint, untrackChokepoint } from '../api/sync'
 import type { ChokepointSummary } from '../api/types'
 
-const SEVERITY_OPTIONS = [
-  { value: 'all', label: 'All' },
-  { value: 'critical', label: 'Critical' },
-  { value: 'high', label: 'High' },
-  { value: 'elevated', label: 'Elevated' },
-  { value: 'moderate', label: 'Moderate' },
-  { value: 'low', label: 'Low' },
-] as const
-
-type SeverityFilter = (typeof SEVERITY_OPTIONS)[number]['value']
+type Tab = 'tracked' | 'browse'
+const PAGE_SIZE = 50
 
 function formatScore(value: number | null | undefined) {
   return value == null ? '-' : value.toFixed(2)
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return '-'
-  return value.slice(0, 10)
-}
-
-function transitValue(cp: ChokepointSummary) {
-  return cp.transit_time_hours ?? cp.transit_count ?? null
-}
-
-function deltaValue(cp: ChokepointSummary) {
-  if (cp.transit_delta_pct != null) return cp.transit_delta_pct
-  const risk = cp.risk_score == null ? 50 : cp.risk_score <= 1 ? cp.risk_score * 100 : cp.risk_score
-  return (risk - 50) / 5
-}
-
 export default function ChokepointsView() {
+  const [tab, setTab] = useState<Tab>('tracked')
   const [chokepoints, setChokepoints] = useState<ChokepointSummary[]>([])
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchChokepoints({ limit: 200 })
-      .then((res) => setChokepoints(res.items))
+  const canTrack = getSyncToken() !== null
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    fetchChokepoints({
+      limit: PAGE_SIZE,
+      offset,
+      q: search.trim() || undefined,
+      tracked: tab === 'tracked' ? true : undefined,
+    })
+      .then((res) => {
+        setChokepoints(res.items)
+        setTotal(res.total)
+        setHasMore(res.has_more)
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [tab, offset, search])
 
-  const sorted = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return chokepoints
-      .filter((cp) => {
-        if (severityFilter !== 'all' && normalizeSeverity(cp.severity) !== severityFilter) return false
-        if (!query) return true
-        return `${cp.name} ${cp.region ?? ''}`.toLowerCase().includes(query)
-      })
-      .sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
-  }, [chokepoints, search, severityFilter])
+  useEffect(() => load(), [load])
+
+  const changeTab = (next: Tab) => {
+    setTab(next)
+    setOffset(0)
+  }
+  const onSearch = (value: string) => {
+    setSearch(value)
+    setOffset(0)
+  }
+
+  const handleTrack = useCallback(
+    async (event: React.MouseEvent, cp: ChokepointSummary) => {
+      event.stopPropagation()
+      if (busyId) return
+      setBusyId(cp.chokepointid)
+      setNotice(null)
+      try {
+        if (cp.is_tracked) {
+          await untrackChokepoint(cp.chokepointid)
+          setNotice(`Untracked ${cp.name}`)
+        } else {
+          const res = await syncChokepoint(cp.chokepointid)
+          setNotice(`Synced ${cp.name} — ${res.rows} rows`)
+        }
+        load()
+      } catch (e: unknown) {
+        setNotice(e instanceof Error ? e.message : 'Action failed')
+      } finally {
+        setBusyId(null)
+      }
+    },
+    [busyId, load],
+  )
 
   return (
     <div className="space-y-6">
@@ -69,7 +89,25 @@ export default function ChokepointsView() {
           <p className="label-cap">Global arteries</p>
           <h1 className="text-5xl">Chokepoints - global arteries</h1>
         </div>
-        <p className="mono text-sm text-[color:var(--ink-3)]">{sorted.length} / {chokepoints.length} shown</p>
+        <p className="mono text-sm text-[color:var(--ink-3)]">{total} total</p>
+      </div>
+
+      <div className="flex gap-2">
+        {(['tracked', 'browse'] as Tab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => changeTab(t)}
+            className={[
+              'ui border px-4 py-2 text-sm font-semibold',
+              tab === t
+                ? 'border-[color:var(--ink)] bg-[color:var(--ink)] text-[color:var(--paper)]'
+                : 'border-[color:var(--rule-thin)] bg-[color:var(--card-2)] text-[color:var(--ink-2)] hover:bg-[color:var(--paper)]',
+            ].join(' ')}
+          >
+            {t === 'tracked' ? 'Tracked' : 'Browse all'}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-col gap-3 border border-[color:var(--rule-thin)] bg-[color:var(--card)] p-3 md:flex-row md:items-center md:justify-between">
@@ -78,59 +116,43 @@ export default function ChokepointsView() {
           <input
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search name or region"
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Search name"
             className="ui w-full border border-[color:var(--rule-thin)] bg-[color:var(--paper)] py-2 pl-9 pr-3 text-sm text-[color:var(--ink)] placeholder:text-[color:var(--ink-4)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
           />
         </label>
-        <div className="flex flex-wrap gap-2">
-          {SEVERITY_OPTIONS.map((option) => {
-            const active = severityFilter === option.value
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setSeverityFilter(option.value)}
-                className={[
-                  'ui border px-3 py-2 text-xs font-semibold',
-                  active
-                    ? 'border-[color:var(--ink)] bg-[color:var(--ink)] text-[color:var(--paper)]'
-                    : 'border-[color:var(--rule-thin)] bg-[color:var(--card-2)] text-[color:var(--ink-2)] hover:bg-[color:var(--paper)]',
-                ].join(' ')}
-              >
-                {option.label}
-              </button>
-            )
-          })}
-        </div>
+        {notice && <p className="mono text-xs text-[color:var(--ink-3)]">{notice}</p>}
       </div>
 
       {loading ? (
         <DataState status="loading" />
       ) : error ? (
         <DataState status="error" error={error} />
-      ) : sorted.length === 0 ? (
-        <DataState status="empty" emptyMessage="No chokepoints match your search" />
+      ) : chokepoints.length === 0 ? (
+        <DataState
+          status="empty"
+          emptyMessage={tab === 'tracked' ? 'No tracked chokepoints yet — switch to Browse all and Sync one' : 'No chokepoints match your search'}
+        />
       ) : (
-        <div className="overflow-x-auto border border-[color:var(--rule-thin)] bg-[color:var(--card)]">
-          <table className="dtable">
-            <thead>
-              <tr>
-                <th>Chokepoint / region</th>
-                <th>Severity</th>
-                <th>Risk score</th>
-                <th>Status</th>
-                <th>Transit time</th>
-                <th>Delta</th>
-                <th>Last updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((cp) => {
-                const transit = transitValue(cp)
-                const delta = deltaValue(cp)
-                return (
-                  <tr key={cp.id} onClick={() => navigate(`/chokepoints/${encodeURIComponent(cp.id)}`)}>
+        <>
+          <div className="overflow-x-auto border border-[color:var(--rule-thin)] bg-[color:var(--card)]">
+            <table className="dtable">
+              <thead>
+                <tr>
+                  <th>Chokepoint</th>
+                  <th>Severity</th>
+                  <th>Risk score</th>
+                  <th>Status</th>
+                  {canTrack && <th>Track</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {chokepoints.map((cp) => (
+                  <tr
+                    key={cp.chokepointid}
+                    onClick={() => navigate(`/chokepoints/${encodeURIComponent(cp.chokepointid)}`)}
+                    className={cp.is_tracked ? 'bg-[color:var(--paper)]' : undefined}
+                  >
                     <td>
                       <p className="font-semibold text-[color:var(--ink)]">{cp.name}</p>
                       <p className="mt-1 text-xs text-[color:var(--ink-3)]">{cp.region ?? 'Global artery'}</p>
@@ -143,20 +165,46 @@ export default function ChokepointsView() {
                         <span className="text-sm text-[color:var(--ink-3)]">{normalizeSeverity(cp.severity)}</span>
                       </span>
                     </td>
-                    <td className="mono">{transit != null ? `${transit.toFixed(1)} h` : '-'}</td>
-                    <td
-                      className="mono"
-                      style={{ color: delta > 0 ? 'var(--negative)' : 'var(--positive)' }}
-                    >
-                      {delta >= 0 ? '+' : ''}{delta.toFixed(1)}%
-                    </td>
-                    <td className="mono text-xs text-[color:var(--ink-3)]">{formatDate(cp.updated_at)}</td>
+                    {canTrack && (
+                      <td>
+                        <button
+                          type="button"
+                          disabled={busyId === cp.chokepointid}
+                          onClick={(e) => handleTrack(e, cp)}
+                          className="ui border border-[color:var(--rule-thin)] bg-[color:var(--paper)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--card-2)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                        >
+                          {busyId === cp.chokepointid ? '…' : cp.is_tracked ? 'Untrack' : 'Sync'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              disabled={offset === 0}
+              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+              className="ui border border-[color:var(--rule-thin)] px-3 py-2 text-xs font-semibold disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <span className="mono text-xs text-[color:var(--ink-3)]">
+              {offset + 1}–{offset + chokepoints.length} of {total}
+            </span>
+            <button
+              type="button"
+              disabled={!hasMore}
+              onClick={() => setOffset(offset + PAGE_SIZE)}
+              className="ui border border-[color:var(--rule-thin)] px-3 py-2 text-xs font-semibold disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

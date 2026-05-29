@@ -9,6 +9,8 @@ import type {
 
 export interface PortsParams extends PaginationParams {
   severity?: string
+  q?: string
+  tracked?: boolean
 }
 
 export function fetchPorts(

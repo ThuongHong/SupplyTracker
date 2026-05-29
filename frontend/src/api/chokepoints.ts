@@ -10,6 +10,8 @@ import type {
 
 export interface ChokepointsParams extends PaginationParams {
   severity?: string
+  q?: string
+  tracked?: boolean
 }
 
 export function fetchChokepoints(

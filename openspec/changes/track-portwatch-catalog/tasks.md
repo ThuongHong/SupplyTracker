@@ -41,10 +41,10 @@
 
 ## 7. Frontend: tracked / browse-all tabs
 
-- [ ] 7.1 Extend `frontend/src/api/ports.ts` + `chokepoints.ts` with `q`/`tracked` params and sync/track/untrack calls
-- [ ] 7.2 Build Tracked / Browse-all tabbed catalog browser (lazy paged list + search input) for ports
-- [ ] 7.3 Add per-row Sync (untracked) and Untrack (tracked) buttons wired to the endpoints; reuse for chokepoints
-- [ ] 7.4 Vitest coverage for the catalog browser (tab switch, search, sync/untrack actions)
+- [x] 7.1 Extend `frontend/src/api/ports.ts` + `chokepoints.ts` with `q`/`tracked` params and sync/track/untrack calls
+- [x] 7.2 Build Tracked / Browse-all tabbed catalog browser (lazy paged list + search input) for ports
+- [x] 7.3 Add per-row Sync (untracked) and Untrack (tracked) buttons wired to the endpoints; reuse for chokepoints
+- [x] 7.4 Vitest coverage for the catalog browser (tab switch, search, sync/untrack actions)
 
 ## 8. Seed + migration data
 
