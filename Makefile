@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help up down logs shell-be shell-fe test lint collect-all forecast migrate bootstrap
+.PHONY: help up down logs shell-be shell-fe test lint collect-all catalog forecast migrate bootstrap
 
 help: ## Show this help message
 	@echo "SupplyTracker — available targets:"

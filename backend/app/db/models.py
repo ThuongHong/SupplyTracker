@@ -14,6 +14,7 @@ from geoalchemy2 import Geography
 from geoalchemy2.elements import WKBElement
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -36,6 +37,9 @@ class Port(Base):
     __tablename__ = "ports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # PortWatch business key (e.g. "port1188"). Stable identifier used as the
+    # API path id and the metric entity_id; the int id stays for existing FKs.
+    portid: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     locode: Mapped[str | None] = mapped_column(String(16), index=True, unique=True, nullable=True)
     name: Mapped[str] = mapped_column(String(128))
     country: Mapped[str] = mapped_column(String(64))
@@ -45,15 +49,23 @@ class Port(Base):
     )
     radius_km: Mapped[float] = mapped_column(Float, server_default="25.0")
     twenty_ft_eq_units_year: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    is_tracked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
 
 class Chokepoint(Base):
     __tablename__ = "chokepoints"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # PortWatch chokepoint business key (e.g. "chokepoint1").
+    chokepointid: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128), unique=True)
     geom: Mapped[WKBElement] = mapped_column(
         Geography(geometry_type="POLYGON", srid=4326), nullable=False
+    )
+    is_tracked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
 
 

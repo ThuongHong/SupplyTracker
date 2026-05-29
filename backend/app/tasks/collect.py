@@ -111,6 +111,17 @@ def collect_news(self: Any) -> dict[str, Any]:
         raise self.retry(exc=exc) from exc
 
 
+@celery_app.task(name="collect.catalog", bind=True, max_retries=3, default_retry_delay=120)
+def collect_catalog(self: Any) -> dict[str, Any]:
+    """Ingest PortWatch port/chokepoint metadata catalog (no metrics)."""
+    try:
+        from app.collectors.catalog import CatalogCollector
+        return _run_collector(CatalogCollector)
+    except Exception as exc:
+        logger.error("collect_catalog failed, retrying: %s", exc)
+        raise self.retry(exc=exc) from exc
+
+
 # ── chord callback ─────────────────────────────────────────────────────────────
 
 @celery_app.task(name="collect._on_collect_all_done")

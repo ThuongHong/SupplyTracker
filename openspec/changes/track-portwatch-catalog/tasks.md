@@ -1,16 +1,16 @@
 ## 1. Data model + migration
 
-- [ ] 1.1 Add `portid` (String, unique, not null) + `is_tracked` (bool, default false) to `Port`; add `chokepointid` (String, unique) + `is_tracked` to `Chokepoint` in `app/db/models.py`
-- [ ] 1.2 Write Alembic migration `0004` adding the columns (nullable → backfill → not-null for the id columns)
-- [ ] 1.3 Verify migration upgrades and downgrades cleanly against a fresh DB
+- [x] 1.1 Add `portid` (String, unique, not null) + `is_tracked` (bool, default false) to `Port`; add `chokepointid` (String, unique) + `is_tracked` to `Chokepoint` in `app/db/models.py`
+- [x] 1.2 Write Alembic migration `0004` adding the columns (nullable → backfill → not-null for the id columns)
+- [x] 1.3 Verify migration upgrades and downgrades cleanly against a fresh DB
 
 ## 2. Catalog ingest (metadata only)
 
-- [ ] 2.1 Create `app/collectors/catalog.py` paging `PortWatch_ports_database` (1000/page via `resultOffset`) and upserting portid/name/country/POINT geom — no metric calls
-- [ ] 2.2 Add chokepoint ingest from `PortWatch_chokepoints_database`, synthesizing a circle POLYGON from lat/lon (reuse `_circle_polygon_wkt`)
-- [ ] 2.3 Make ingest idempotent on portid/chokepointid and never reset `is_tracked`; log per-feature errors without aborting
-- [ ] 2.4 Add `collect_catalog` Celery task + `POST /sync/catalog` endpoint (bearer-protected) + `make catalog` target
-- [ ] 2.5 Unit tests: paging beyond 1000, idempotent re-sync preserves tracking, chokepoint geom synthesized
+- [x] 2.1 Create `app/collectors/catalog.py` paging `PortWatch_ports_database` (1000/page via `resultOffset`) and upserting portid/name/country/POINT geom — no metric calls
+- [x] 2.2 Add chokepoint ingest from `PortWatch_chokepoints_database`, synthesizing a circle POLYGON from lat/lon (reuse `_circle_polygon_wkt`)
+- [x] 2.3 Make ingest idempotent on portid/chokepointid and never reset `is_tracked`; log per-feature errors without aborting
+- [x] 2.4 Add `collect_catalog` Celery task + `POST /sync/catalog` endpoint (bearer-protected) + `make catalog` target
+- [x] 2.5 Unit tests: paging beyond 1000, idempotent re-sync preserves tracking, chokepoint geom synthesized
 
 ## 3. Switch port entity_id to portid
 
