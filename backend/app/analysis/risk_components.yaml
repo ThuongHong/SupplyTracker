@@ -1,40 +1,38 @@
-schema_version: "1.0"
+schema_version: "1.1"
 severity_thresholds: [0.3, 0.6, 0.8]  # low/elevated/high/critical boundaries
 max_missing_fraction: 0.5  # refuse to score above this
+# Components reference only metrics actually provided by PortWatch daily data:
+#   ports → port_calls, import_volume, export_volume
+#   chokepoints → transit_calls, transit_capacity
+# A sharp drop below baseline (higher_is_better) signals a disruption → higher risk.
 components:
   - name: throughput
     metric: port_calls
-    weight: 0.35
+    weight: 0.40
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [port]
-  - name: dwell_time
-    metric: dwell_hours
-    weight: 0.25
+  - name: import_volume
+    metric: import_volume
+    weight: 0.30
     baseline_window_days: 30
-    direction: higher_is_worse
+    direction: higher_is_better
     entity_types: [port]
-  - name: congestion
-    metric: anchored_count
-    weight: 0.20
+  - name: export_volume
+    metric: export_volume
+    weight: 0.30
     baseline_window_days: 30
-    direction: higher_is_worse
+    direction: higher_is_better
     entity_types: [port]
   - name: transit_volume
     metric: transit_calls
+    weight: 0.60
+    baseline_window_days: 30
+    direction: higher_is_better
+    entity_types: [chokepoint]
+  - name: transit_capacity
+    metric: transit_capacity
     weight: 0.40
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [chokepoint]
-  - name: vessel_density
-    metric: vessel_count
-    weight: 0.35
-    baseline_window_days: 30
-    direction: higher_is_better
-    entity_types: [chokepoint]
-  - name: speed
-    metric: median_speed
-    weight: 0.25
-    baseline_window_days: 30
-    direction: higher_is_better
-    entity_types: [port, chokepoint]

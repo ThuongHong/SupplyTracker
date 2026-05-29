@@ -23,16 +23,29 @@ _CHOKEPOINTS_DAILY_LAYER = "Daily_Chokepoints_Data/FeatureServer/0/query"
 
 # Daily port metrics we extract: ArcGIS field → (metric_name, unit).
 # Metric names match the existing convention (seed_dev / dashboard throughput).
+# Per-category port calls feed the cargo-type "vessel mix" chart.
 _PORT_METRICS = {
     "portcalls": ("port_calls", "vessels"),
     "import": ("import_volume", "tons"),
     "export": ("export_volume", "tons"),
+    "portcalls_container": ("portcalls_container", "vessels"),
+    "portcalls_dry_bulk": ("portcalls_dry_bulk", "vessels"),
+    "portcalls_general_cargo": ("portcalls_general_cargo", "vessels"),
+    "portcalls_roro": ("portcalls_roro", "vessels"),
+    "portcalls_tanker": ("portcalls_tanker", "vessels"),
 }
-# Daily chokepoint metrics.
+_PORT_OUT_FIELDS = "date,portid,portname," + ",".join(_PORT_METRICS)
+# Daily chokepoint metrics (per-vessel-type transit counts feed the mix chart).
 _CHOKEPOINT_METRICS = {
     "n_total": ("transit_calls", "vessels"),
     "capacity": ("transit_capacity", "tons"),
+    "n_container": ("transit_container", "vessels"),
+    "n_dry_bulk": ("transit_dry_bulk", "vessels"),
+    "n_general_cargo": ("transit_general_cargo", "vessels"),
+    "n_roro": ("transit_roro", "vessels"),
+    "n_tanker": ("transit_tanker", "vessels"),
 }
+_CHOKE_OUT_FIELDS = "date,portid,portname," + ",".join(_CHOKEPOINT_METRICS)
 
 # ArcGIS where-clause `IN (...)` can get long; chunk tracked ids per request.
 _ID_CHUNK = 100
@@ -166,7 +179,7 @@ class PortWatchCollector(BaseCollector):
             rows = self._query(
                 client, base_url, _PORTS_DAILY_LAYER,
                 f"{date_filter} AND portid IN ({ids})",
-                "date,portid,portname,portcalls,import,export",
+                _PORT_OUT_FIELDS,
             )
             for row in rows:
                 portid = str(row.get("portid") or "")
@@ -202,7 +215,7 @@ class PortWatchCollector(BaseCollector):
             rows = self._query(
                 client, base_url, _CHOKEPOINTS_DAILY_LAYER,
                 f"{date_filter} AND portid IN ({ids})",
-                "date,portid,portname,n_total,capacity",
+                _CHOKE_OUT_FIELDS,
             )
             for row in rows:
                 cpid = str(row.get("portid") or "")

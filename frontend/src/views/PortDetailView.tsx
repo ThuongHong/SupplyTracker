@@ -10,11 +10,9 @@ import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icon
 import { navigate } from '../router'
 import { fetchPort, fetchPortMetrics } from '../api/ports'
 import { fetchEntityDashboard } from '../api/dashboard'
-import { tracked } from '../data/tracked'
+import { getSyncToken, syncPort } from '../api/sync'
 import { EventLog } from '../components/EventLog'
-import { SyncButton } from '../components/SyncButton'
 import { VesselMixChart } from '../components/charts/VesselMixChart'
-import { DwellTrendChart } from '../components/charts/DwellTrendChart'
 import { RiskForecastChart } from '../components/charts/RiskForecastChart'
 import { IndicesPanel } from '../components/charts/IndicesPanel'
 import type { PortDetail, MetricPoint, DashboardResponse } from '../api/types'
@@ -132,7 +130,8 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
   const [port, setPort] = useState<PortDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isTracked, setIsTracked] = useState(() => tracked.ports.has(id))
+  const [syncing, setSyncing] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const [window, setWindow] = useState<'7d' | '30d' | '90d'>(() => {
     return (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
@@ -140,7 +139,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [dashLoading, setDashLoading] = useState(true)
 
-  useEffect(() => tracked.ports.subscribe(() => setIsTracked(tracked.ports.has(id))), [id])
+  const canSync = getSyncToken() !== null
 
   useEffect(() => {
     let cancelled = false
@@ -160,7 +159,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, reloadKey])
 
   useEffect(() => {
     let cancelled = false
@@ -169,18 +168,24 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       .then((d) => { if (!cancelled) { setDashboard(d); setDashLoading(false) } })
       .catch(() => { if (!cancelled) setDashLoading(false) })
     return () => { cancelled = true }
-  }, [id, window])
+  }, [id, window, reloadKey])
 
   const handleWindowChange = (w: '7d' | '30d' | '90d') => {
     setWindow(w)
     localStorage.setItem('entity_window', w)
   }
 
-  const toggleTrack = () => {
-    if (isTracked) {
-      tracked.ports.remove(id)
-    } else {
-      tracked.ports.add(id)
+  const isTracked = port?.is_tracked ?? false
+
+  // Sync = fetch latest 90 days + track, then auto-refresh all charts.
+  const handleSync = async () => {
+    if (!port || syncing) return
+    setSyncing(true)
+    try {
+      await syncPort(port.portid)
+      setReloadKey((k) => k + 1)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -250,19 +255,31 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
           </p>
         </div>
         <WindowPicker value={window} onChange={handleWindowChange} />
-        <SyncButton />
-        <button
-          onClick={toggleTrack}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          aria-label={isTracked ? 'Untrack port' : 'Track port'}
-        >
-          {isTracked ? (
-            <IconStarFilled className="w-4 h-4 text-amber-500" />
-          ) : (
-            <IconStar className="w-4 h-4 text-gray-400" />
-          )}
-          {isTracked ? 'Tracked' : 'Track'}
-        </button>
+        {canSync && (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+            aria-label={isTracked ? 'Untrack port' : 'Sync port data'}
+          >
+            {syncing ? (
+              <>
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Syncing…
+              </>
+            ) : isTracked ? (
+              <>
+                <IconStarFilled className="w-4 h-4 text-amber-500" />
+                Tracked · Re-sync
+              </>
+            ) : (
+              <>
+                <IconStar className="w-4 h-4 text-gray-400" />
+                Sync data
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* KPI Strip */}
@@ -297,21 +314,12 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         )}
       </Card>
 
-      {/* Vessel Status */}
-      <Card title="Vessel Status">
+      {/* Vessel mix by cargo type (PortWatch port calls) */}
+      <Card title="Vessel Mix — port calls by cargo type">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
           <VesselMixChart data={dashboard?.charts.vessel_mix ?? []} />
-        )}
-      </Card>
-
-      {/* Avg Dwell Hours */}
-      <Card title="Avg Dwell Hours">
-        {dashLoading ? (
-          <DataState status="loading" />
-        ) : (
-          <DwellTrendChart data={dashboard?.charts.dwell_hours ?? []} />
         )}
       </Card>
 

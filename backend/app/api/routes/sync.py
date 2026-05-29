@@ -71,6 +71,8 @@ def sync_port(_auth: AuthRequired, db: DbSession, portid: str) -> EntitySyncResp
     result = PortWatchCollector().sync_port(db, port.portid, port.name)
     port.is_tracked = True
     db.commit()
+    from app.analysis.entity_pipeline import score_and_forecast_entity
+    score_and_forecast_entity(db, "port", port.portid, port.name)
     logger.info("Synced port %s — rows=%d", portid, result.rows)
     return EntitySyncResponse(
         entity_type="port",
@@ -95,6 +97,11 @@ def sync_chokepoint(
     result = PortWatchCollector().sync_chokepoint(db, cp.chokepointid, cp.name)
     cp.is_tracked = True
     db.commit()
+    from app.analysis.entity_pipeline import score_and_forecast_entity
+    # Chokepoint scoring keys off the lowercase-slug entity_id (collector convention).
+    score_and_forecast_entity(
+        db, "chokepoint", cp.name.lower().replace(" ", "_"), cp.name
+    )
     logger.info("Synced chokepoint %s — rows=%d", chokepointid, result.rows)
     return EntitySyncResponse(
         entity_type="chokepoint",

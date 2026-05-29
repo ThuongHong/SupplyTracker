@@ -11,12 +11,10 @@ from app.db.models import (
     BunkerPrice,
     Chokepoint,
     ChokepointRiskScore,
-    ChokepointStatus,
     DisruptionPropagation,
     EntityRiskForecast,
     FreightIndex,
     Port,
-    PortCongestion,
     PortRiskScore,
     PortWatchMetric,
 )
@@ -29,6 +27,61 @@ from app.schemas.dashboard import (
 
 _WINDOW_DAYS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
 _FALLBACK_THROUGHPUT_METRIC = "vessels_in_port"
+
+# PortWatch per-category port-call metrics → cargo-type label for the mix chart.
+_PORT_CATEGORY_METRICS: dict[str, str] = {
+    "portcalls_container": "container",
+    "portcalls_dry_bulk": "dry_bulk",
+    "portcalls_general_cargo": "general_cargo",
+    "portcalls_roro": "roro",
+    "portcalls_tanker": "tanker",
+}
+_CHOKE_CATEGORY_METRICS: dict[str, str] = {
+    "transit_container": "container",
+    "transit_dry_bulk": "dry_bulk",
+    "transit_general_cargo": "general_cargo",
+    "transit_roro": "roro",
+    "transit_tanker": "tanker",
+}
+
+
+def _category_mix(
+    session: Session, entity_type: str, entity_id: str, mapping: dict[str, str], since: datetime
+) -> list[dict[str, Any]]:
+    rows = (
+        session.query(PortWatchMetric)
+        .filter(
+            PortWatchMetric.entity_type == entity_type,
+            PortWatchMetric.entity_id == entity_id,
+            PortWatchMetric.metric_name.in_(list(mapping)),
+            PortWatchMetric.observed_at >= since,
+        )
+        .order_by(PortWatchMetric.observed_at)
+        .all()
+    )
+    mix: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        key = r.observed_at.isoformat()
+        bucket = mix.setdefault(key, {"time": key})
+        bucket[mapping[r.metric_name]] = r.metric_value
+    return list(mix.values())
+
+
+def _metric_series(
+    session: Session, entity_type: str, entity_id: str, metric: str, since: datetime
+) -> list[dict[str, Any]]:
+    rows = (
+        session.query(PortWatchMetric)
+        .filter(
+            PortWatchMetric.entity_type == entity_type,
+            PortWatchMetric.entity_id == entity_id,
+            PortWatchMetric.metric_name == metric,
+            PortWatchMetric.observed_at >= since,
+        )
+        .order_by(PortWatchMetric.observed_at)
+        .all()
+    )
+    return [{"time": r.observed_at.isoformat(), "value": r.metric_value} for r in rows]
 
 
 def _window_start(window: str) -> datetime:
@@ -129,29 +182,28 @@ def build_port_dashboard(
         return None
 
     since = _window_start(window)
-    throughput_metric = _get_default_throughput_metric(session)
+    throughput_metric = "port_calls"
 
-    # --- Congestion charts ---
-    congestion_rows = (
-        session.query(PortCongestion)
-        .filter(PortCongestion.port_id == port.id, PortCongestion.time >= since)
-        .order_by(PortCongestion.time)
+    # --- Vessel mix: PortWatch per-category port calls (real data) ---
+    cat_rows = (
+        session.query(PortWatchMetric)
+        .filter(
+            PortWatchMetric.entity_type == "port",
+            PortWatchMetric.entity_id == port.portid,
+            PortWatchMetric.metric_name.in_(list(_PORT_CATEGORY_METRICS)),
+            PortWatchMetric.observed_at >= since,
+        )
+        .order_by(PortWatchMetric.observed_at)
         .all()
     )
-    vessel_mix = [
-        {
-            "time": r.time.isoformat(),
-            "anchored": r.anchored_count,
-            "moored": r.moored_count,
-            "underway": r.underway_count,
-        }
-        for r in congestion_rows
-    ]
-    dwell_hours = [
-        {"time": r.time.isoformat(), "value": r.avg_dwell_hours}
-        for r in congestion_rows
-        if r.avg_dwell_hours is not None
-    ]
+    _mix: dict[str, dict[str, Any]] = {}
+    for r in cat_rows:
+        key = r.observed_at.isoformat()
+        bucket = _mix.setdefault(key, {"time": key})
+        bucket[_PORT_CATEGORY_METRICS[r.metric_name]] = r.metric_value
+    vessel_mix = list(_mix.values())
+    # PortWatch provides no dwell-time data; the card is removed in the UI.
+    dwell_hours: list[dict[str, Any]] = []
 
     # --- Throughput (PortWatchMetric) ---
     throughput_rows = (
@@ -174,7 +226,7 @@ def build_port_dashboard(
     risk_rows = (
         session.query(PortRiskScore)
         .filter(
-            PortRiskScore.entity_id == (port.locode or port.name),
+            PortRiskScore.entity_id == port.portid,
             PortRiskScore.time >= since,
         )
         .order_by(PortRiskScore.time)
@@ -186,12 +238,13 @@ def build_port_dashboard(
         if r.score is not None
     ]
 
-    # --- Forecast ---
+    # --- Forecast (throughput = port_calls) ---
     forecast_row = (
         session.query(EntityRiskForecast)
         .filter(
             EntityRiskForecast.entity_type == "port",
-            EntityRiskForecast.entity_id == (port.locode or port.name),
+            EntityRiskForecast.entity_id == port.portid,
+            EntityRiskForecast.forecast_key.like("%:port_calls:%"),
         )
         .order_by(desc(EntityRiskForecast.created_at))
         .first()
@@ -201,9 +254,9 @@ def build_port_dashboard(
         forecast = [
             {
                 "time": pred["date"],
-                "value": pred["predicted_score"],
-                "lo": pred.get("lower_bound", 0),
-                "hi": pred.get("upper_bound", 0),
+                "value": pred.get("value", pred.get("predicted_score", 0)),
+                "lo": pred.get("low", pred.get("lower_bound", 0)),
+                "hi": pred.get("high", pred.get("upper_bound", 0)),
             }
             for pred in forecast_row.predictions
         ]
@@ -218,21 +271,21 @@ def build_port_dashboard(
     risk_30d_mean = sum(scores) / len(scores) if scores else None
     risk_30d_max = max(scores) if scores else None
 
-    latest_cong = congestion_rows[-1] if congestion_rows else None
-    dwell_latest = latest_cong.avg_dwell_hours if latest_cong else None
-    vessel_count_latest = latest_cong.total_in_area if latest_cong else None
+    # No dwell data from PortWatch; "vessels" proxied by latest total port calls.
+    dwell_latest = None
+    vessel_count_latest = int(float(throughput[-1]["value"])) if throughput else None  # type: ignore[arg-type]
 
     # --- Disruptions (port is downstream target) ---
     disruption_rows = (
         session.query(DisruptionPropagation)
-        .filter(DisruptionPropagation.target_entity_id == (port.locode or port.name))
+        .filter(DisruptionPropagation.target_entity_id == port.portid)
         .order_by(desc(DisruptionPropagation.started_at))
         .all()
     )
     disruptions = [_serialize_disruption(d) for d in disruption_rows]
 
     return DashboardResponse(
-        entity=EntityInfo(type="port", id=port.locode or port.name, name=port.name),
+        entity=EntityInfo(type="port", id=port.portid, name=port.name),
         window=window,
         charts={
             "vessel_mix": vessel_mix,
@@ -259,41 +312,29 @@ def build_chokepoint_dashboard(
     session: Session, cp_id: str, window: str
 ) -> DashboardResponse | None:
     """Build dashboard payload for a chokepoint. Returns None if not found."""
-    all_cps = session.query(Chokepoint).all()
-    cp = next(
-        (c for c in all_cps if c.name.lower().replace(" ", "_") == cp_id),
-        None,
-    )
+    # Accept either the chokepointid (e.g. "chokepoint6") or the name slug.
+    cp = session.query(Chokepoint).filter(Chokepoint.chokepointid == cp_id).first()
+    if cp is None:
+        all_cps = session.query(Chokepoint).all()
+        cp = next(
+            (c for c in all_cps if c.name.lower().replace(" ", "_") == cp_id), None
+        )
     if cp is None:
         return None
 
+    # Metrics / risk / forecast are keyed by the name slug (collector convention).
+    slug = cp.name.lower().replace(" ", "_")
     since = _window_start(window)
 
-    # --- ChokepointStatus charts ---
-    status_rows = (
-        session.query(ChokepointStatus)
-        .filter(
-            ChokepointStatus.chokepoint_id == cp.id,
-            ChokepointStatus.time >= since,
-        )
-        .order_by(ChokepointStatus.time)
-        .all()
-    )
-    vessel_count_chart = [
-        {"time": r.time.isoformat(), "value": r.vessel_count}
-        for r in status_rows
-    ]
-    median_speed_chart = [
-        {"time": r.time.isoformat(), "value": r.median_speed}
-        for r in status_rows
-        if r.median_speed is not None
-    ]
+    # --- Transit volume + cargo-type mix (real PortWatch data) ---
+    transit_volume = _metric_series(session, "chokepoint", slug, "transit_calls", since)
+    vessel_mix = _category_mix(session, "chokepoint", slug, _CHOKE_CATEGORY_METRICS, since)
 
     # --- Risk trend (ChokepointRiskScore) ---
     risk_rows = (
         session.query(ChokepointRiskScore)
         .filter(
-            ChokepointRiskScore.entity_id == cp_id,
+            ChokepointRiskScore.entity_id == slug,
             ChokepointRiskScore.time >= since,
         )
         .order_by(ChokepointRiskScore.time)
@@ -310,7 +351,8 @@ def build_chokepoint_dashboard(
         session.query(EntityRiskForecast)
         .filter(
             EntityRiskForecast.entity_type == "chokepoint",
-            EntityRiskForecast.entity_id == cp_id,
+            EntityRiskForecast.entity_id == slug,
+            EntityRiskForecast.forecast_key.like("%:transit_calls:%"),
         )
         .order_by(desc(EntityRiskForecast.created_at))
         .first()
@@ -320,9 +362,9 @@ def build_chokepoint_dashboard(
         forecast = [
             {
                 "time": pred["date"],
-                "value": pred["predicted_score"],
-                "lo": pred.get("lower_bound", 0),
-                "hi": pred.get("upper_bound", 0),
+                "value": pred.get("value", pred.get("predicted_score", 0)),
+                "lo": pred.get("low", pred.get("lower_bound", 0)),
+                "hi": pred.get("high", pred.get("upper_bound", 0)),
             }
             for pred in forecast_row.predictions
         ]
@@ -337,24 +379,25 @@ def build_chokepoint_dashboard(
     risk_30d_mean = sum(scores) / len(scores) if scores else None
     risk_30d_max = max(scores) if scores else None
 
-    latest_status = status_rows[-1] if status_rows else None
-    vessel_count_latest = latest_status.vessel_count if latest_status else None
+    vessel_count_latest = (
+        int(float(transit_volume[-1]["value"])) if transit_volume else None
+    )
 
     # --- Disruptions (chokepoint is the source) ---
     disruption_rows = (
         session.query(DisruptionPropagation)
-        .filter(DisruptionPropagation.source_entity_id == cp_id)
+        .filter(DisruptionPropagation.source_entity_id == slug)
         .order_by(desc(DisruptionPropagation.started_at))
         .all()
     )
     disruptions = [_serialize_disruption(d) for d in disruption_rows]
 
     return DashboardResponse(
-        entity=EntityInfo(type="chokepoint", id=cp_id, name=cp.name),
+        entity=EntityInfo(type="chokepoint", id=cp.chokepointid, name=cp.name),
         window=window,
         charts={
-            "vessel_count": vessel_count_chart,
-            "median_speed": median_speed_chart,
+            "transit_volume": transit_volume,
+            "vessel_mix": vessel_mix,
             "risk_trend": risk_trend,
             "forecast": forecast,
             "indices": indices,

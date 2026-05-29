@@ -46,18 +46,22 @@ _CHOKEPOINT_PORTID = {
 def _chokepoint_entity_id(name: str) -> str:
     return name.lower().replace(" ", "_")
 
+# Mirror the real PortWatch daily fields so dev data scores/charts like prod.
 _PORT_METRICS: list[tuple[str, float, float, str | None]] = [
     # (metric_name, base, noise_half_range, unit)
-    ("port_calls",     150.0, 30.0, None),
-    ("dwell_hours",     24.0,  8.0, "h"),
-    ("anchored_count",  12.0,  5.0, None),
-    ("median_speed",     8.0,  1.5, "kn"),
+    ("port_calls",        150.0,  30.0, "vessels"),
+    ("import_volume",  450000.0, 80000.0, "tons"),
+    ("export_volume",  400000.0, 70000.0, "tons"),
+    ("portcalls_container", 60.0, 15.0, "vessels"),
+    ("portcalls_dry_bulk",  40.0, 12.0, "vessels"),
+    ("portcalls_tanker",    30.0, 10.0, "vessels"),
 ]
 
 _CHOKEPOINT_METRICS: list[tuple[str, float, float, str | None]] = [
-    ("transit_calls", 60.0,  15.0, None),
-    ("vessel_count",  35.0,  10.0, None),
-    ("median_speed",  12.0,   2.0, "kn"),
+    ("transit_calls",        60.0,    15.0, "vessels"),
+    ("transit_capacity", 2000000.0, 400000.0, "tons"),
+    ("transit_container",    25.0,     8.0, "vessels"),
+    ("transit_tanker",       18.0,     6.0, "vessels"),
 ]
 
 _FREIGHT_SERIES: list[tuple[str, float, float, str]] = [

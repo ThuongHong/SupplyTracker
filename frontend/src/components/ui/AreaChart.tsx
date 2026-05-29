@@ -32,6 +32,8 @@ interface AreaChartProps {
   height?: number
   className?: string
   showLegend?: boolean
+  /** Stack all series into a single cumulative area (e.g. cargo-type mix). */
+  stacked?: boolean
   yTickFormatter?: (value: number) => string
   tooltipFormatter?: (value: number, name: string) => [string, string]
 }
@@ -47,6 +49,7 @@ export function AreaChart({
   height = 200,
   className = '',
   showLegend = false,
+  stacked = false,
   yTickFormatter,
   tooltipFormatter,
 }: AreaChartProps) {
@@ -109,9 +112,11 @@ export function AreaChart({
               type="monotone"
               dataKey={s.key}
               name={s.name}
+              stackId={stacked ? 'stack' : undefined}
               stroke={s.color}
               strokeWidth={1.5}
-              fill={`url(#grad-${s.key})`}
+              fill={stacked ? s.color : `url(#grad-${s.key})`}
+              fillOpacity={stacked ? (s.fillOpacity ?? 0.5) : 1}
               dot={false}
               activeDot={{ r: 4, strokeWidth: 0 }}
             />
