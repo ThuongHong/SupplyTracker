@@ -22,10 +22,12 @@ class PortMetricsResponse(BaseModel):
 
 class PortListItem(BaseModel):
     id: int
+    portid: str
     locode: str | None
     name: str
     country: str
     region: str | None
+    is_tracked: bool = False
     severity: str | None = None
     risk_score: float | None = None
     updated_at: str | None = None
@@ -35,10 +37,12 @@ class PortListItem(BaseModel):
 
 class PortDetail(BaseModel):
     id: int
+    portid: str
     locode: str | None
     name: str
     country: str
     region: str | None
+    is_tracked: bool = False
     radius_km: float
     twenty_ft_eq_units_year: int | None
     coordinates: list[float] | None = None

@@ -14,17 +14,17 @@
 
 ## 3. Switch port entity_id to portid
 
-- [ ] 3.1 Rewrite `app/collectors/portwatch.py`: drop curated map; daily refresh iterates `is_tracked` portids (chunk `IN (...)`), writes port metrics with `entity_id = portid`
-- [ ] 3.2 Update `app/services/dashboard.py` to join ports by `portid`
-- [ ] 3.3 Update `app/api/routes/ports.py` detail/metrics routes to resolve by `portid`
-- [ ] 3.4 Update `app/collectors/google_news.py` to use `portid` as port entity_id and query only `is_tracked` entities
+- [x] 3.1 Rewrite `app/collectors/portwatch.py`: drop curated map; daily refresh iterates `is_tracked` portids (chunk `IN (...)`), writes port metrics with `entity_id = portid`
+- [x] 3.2 Update `app/services/dashboard.py` to join ports by `portid`
+- [x] 3.3 Update `app/api/routes/ports.py` detail/metrics routes to resolve by `portid`
+- [x] 3.4 Update `app/collectors/google_news.py` to use `portid` as port entity_id and query only `is_tracked` entities
 - [ ] 3.5 Update existing portwatch/dashboard/news tests for the portid entity_id
 
 ## 4. Per-entity sync = track (90 days)
 
-- [ ] 4.1 Add `POST /sync/port/{portid}` + `POST /sync/chokepoint/{chokepointid}` (bearer-protected): 404 on unknown id, 401 on missing token
-- [ ] 4.2 Implement 90-day fetch (`where date >= maxDate-90d AND portid=X`) upserting metrics, then set `is_tracked=true`
-- [ ] 4.3 Add untrack endpoint(s) clearing `is_tracked` while retaining metrics
+- [x] 4.1 Add `POST /sync/port/{portid}` + `POST /sync/chokepoint/{chokepointid}` (bearer-protected): 404 on unknown id, 401 on missing token
+- [x] 4.2 Implement 90-day fetch (`where date >= maxDate-90d AND portid=X`) upserting metrics, then set `is_tracked=true`
+- [x] 4.3 Add untrack endpoint(s) clearing `is_tracked` while retaining metrics
 - [ ] 4.4 Tests: 90-day backfill + track, unknown id 404, untrack keeps metrics
 
 ## 5. Daily beat refresh of tracked
@@ -35,7 +35,7 @@
 
 ## 6. List APIs: search + tracked filter
 
-- [ ] 6.1 Extend `GET /ports` with `q` (ILIKE name/country) + `tracked` bool; keep pagination/has_more
+- [x] 6.1 Extend `GET /ports` with `q` (ILIKE name/country) + `tracked` bool; keep pagination/has_more
 - [ ] 6.2 Extend `GET /chokepoints` with the same `q` + `tracked` params
 - [ ] 6.3 Tests: search match, tracked filter, untracked paging
 

@@ -120,7 +120,9 @@ def build_port_dashboard(
     session: Session, port_id: str, window: str
 ) -> DashboardResponse | None:
     """Build dashboard payload for a port. Returns None if port not found."""
-    port = session.query(Port).filter(Port.locode == port_id).first()
+    port = session.query(Port).filter(Port.portid == port_id).first()
+    if port is None:
+        port = session.query(Port).filter(Port.locode == port_id).first()
     if port is None:
         port = session.query(Port).filter(Port.name == port_id).first()
     if port is None:
@@ -156,7 +158,7 @@ def build_port_dashboard(
         session.query(PortWatchMetric)
         .filter(
             PortWatchMetric.entity_type == "port",
-            PortWatchMetric.entity_id == (port.locode or port.name),
+            PortWatchMetric.entity_id == port.portid,
             PortWatchMetric.metric_name == throughput_metric,
             PortWatchMetric.observed_at >= since,
         )

@@ -4,8 +4,10 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Path
 
-from app.api.deps import AuthRequired
-from app.schemas.sync import SyncResponse
+from app.api.deps import AuthRequired, DbSession
+from app.collectors.portwatch import PortWatchCollector
+from app.db.models import Chokepoint, Port
+from app.schemas.sync import EntitySyncResponse, SyncResponse
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +56,81 @@ def trigger_sync(
     logger.info("Triggered sync task '%s' — task_id=%s", source, result.id)
 
     return SyncResponse(task_id=result.id, source=source)
+
+
+# ── Per-entity sync = track (90-day backfill) ────────────────────────────────
+
+
+@router.post("/sync/port/{portid}", response_model=EntitySyncResponse)
+def sync_port(_auth: AuthRequired, db: DbSession, portid: str) -> EntitySyncResponse:
+    """Fetch 90 days of data for one port and mark it tracked."""
+    port = db.query(Port).filter(Port.portid == portid).first()
+    if port is None:
+        raise HTTPException(status_code=404, detail=f"Unknown portid '{portid}'")
+
+    result = PortWatchCollector().sync_port(db, port.portid, port.name)
+    port.is_tracked = True
+    db.commit()
+    logger.info("Synced port %s — rows=%d", portid, result.rows)
+    return EntitySyncResponse(
+        entity_type="port",
+        entity_id=portid,
+        rows=result.rows,
+        is_tracked=True,
+        errors=result.errors,
+    )
+
+
+@router.post("/sync/chokepoint/{chokepointid}", response_model=EntitySyncResponse)
+def sync_chokepoint(
+    _auth: AuthRequired, db: DbSession, chokepointid: str
+) -> EntitySyncResponse:
+    """Fetch 90 days of data for one chokepoint and mark it tracked."""
+    cp = db.query(Chokepoint).filter(Chokepoint.chokepointid == chokepointid).first()
+    if cp is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown chokepointid '{chokepointid}'"
+        )
+
+    result = PortWatchCollector().sync_chokepoint(db, cp.chokepointid, cp.name)
+    cp.is_tracked = True
+    db.commit()
+    logger.info("Synced chokepoint %s — rows=%d", chokepointid, result.rows)
+    return EntitySyncResponse(
+        entity_type="chokepoint",
+        entity_id=chokepointid,
+        rows=result.rows,
+        is_tracked=True,
+        errors=result.errors,
+    )
+
+
+# ── Untrack (keeps existing metrics) ─────────────────────────────────────────
+
+
+@router.post("/untrack/port/{portid}", response_model=EntitySyncResponse)
+def untrack_port(_auth: AuthRequired, db: DbSession, portid: str) -> EntitySyncResponse:
+    port = db.query(Port).filter(Port.portid == portid).first()
+    if port is None:
+        raise HTTPException(status_code=404, detail=f"Unknown portid '{portid}'")
+    port.is_tracked = False
+    db.commit()
+    return EntitySyncResponse(
+        entity_type="port", entity_id=portid, rows=0, is_tracked=False
+    )
+
+
+@router.post("/untrack/chokepoint/{chokepointid}", response_model=EntitySyncResponse)
+def untrack_chokepoint(
+    _auth: AuthRequired, db: DbSession, chokepointid: str
+) -> EntitySyncResponse:
+    cp = db.query(Chokepoint).filter(Chokepoint.chokepointid == chokepointid).first()
+    if cp is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown chokepointid '{chokepointid}'"
+        )
+    cp.is_tracked = False
+    db.commit()
+    return EntitySyncResponse(
+        entity_type="chokepoint", entity_id=chokepointid, rows=0, is_tracked=False
+    )

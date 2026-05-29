@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.collectors.base import BaseCollector, CollectionResult
 from app.config import get_settings
-from app.db.models import PortWatchMetric
+from app.db.models import Chokepoint, Port, PortWatchMetric
 
 logger = logging.getLogger(__name__)
 
@@ -20,41 +20,6 @@ logger = logging.getLogger(__name__)
 # real query endpoints (no API key required).
 _PORTS_DAILY_LAYER = "Daily_Ports_Data/FeatureServer/0/query"
 _CHOKEPOINTS_DAILY_LAYER = "Daily_Chokepoints_Data/FeatureServer/0/query"
-
-# ── Entity → PortWatch portid maps ─────────────────────────────────────────────
-# Daily data is keyed by PortWatch's internal ``portid`` (e.g. "port1188"), which
-# does NOT line up with UN/LOCODEs (PortWatch uses spaced, sometimes divergent
-# codes — our "CNSHA" is their "CN SGH"). We therefore curate an explicit map for
-# the ports/chokepoints we track. portids are stable identifiers in PortWatch.
-# Resolved by name against PortWatch_ports_database, picking the busiest match.
-_PORT_PORTID: dict[str, str] = {
-    "AEJEA": "port744",   # Jebel Ali
-    "BEANR": "port57",    # Antwerp
-    "CNGZH": "port425",   # Guangzhou (Nansha)
-    "CNNGB": "port824",   # Ningbo
-    "CNSHA": "port1188",  # Shanghai (Pudong)
-    "CNSZX": "port1189",  # Shekou (Shenzhen)
-    "CNTAO": "port1069",  # Qingdao
-    "CNTXG": "port1297",  # Tianjin Xin Gang
-    "HKHKG": "port474",   # Hong Kong
-    "KRPUS": "port1065",  # Busan
-    "MYPKG": "port960",   # Port Klang
-    "NLRTM": "port1114",  # Rotterdam
-    "SGSIN": "port1201",  # Singapore
-    "USLAX": "port664",   # Los Angeles-Long Beach
-}
-
-# Keys must match the ``name`` column in our chokepoints table exactly.
-_CHOKEPOINT_PORTID: dict[str, str] = {
-    "Suez Canal": "chokepoint1",
-    "Panama Canal": "chokepoint2",
-    "Bab-el-Mandeb": "chokepoint4",
-    "Strait of Malacca": "chokepoint5",
-    "Strait of Hormuz": "chokepoint6",
-    "Strait of Gibraltar": "chokepoint8",
-    "Strait of Dover": "chokepoint9",
-    "Lombok Strait": "chokepoint15",
-}
 
 # Daily port metrics we extract: ArcGIS field → (metric_name, unit).
 # Metric names match the existing convention (seed_dev / dashboard throughput).
@@ -69,14 +34,24 @@ _CHOKEPOINT_METRICS = {
     "capacity": ("transit_capacity", "tons"),
 }
 
+# ArcGIS where-clause `IN (...)` can get long; chunk tracked ids per request.
+_ID_CHUNK = 100
+_BACKFILL_DAYS = 90
+
 
 def _chokepoint_entity_id(name: str) -> str:
     """Match the convention used elsewhere (news collector, disruption lane map)."""
     return name.lower().replace(" ", "_")
 
 
+def _chunks(seq: list[str], n: int) -> list[list[str]]:
+    return [seq[i : i + n] for i in range(0, len(seq), n)]
+
+
 class PortWatchCollector(BaseCollector):
     source_name = "portwatch"
+
+    # ── Entry point: daily refresh of TRACKED entities (latest day) ────────────
 
     def collect(self, session: Session) -> CollectionResult:
         settings = get_settings()
@@ -86,23 +61,170 @@ class PortWatchCollector(BaseCollector):
         errors: list[str] = []
         with httpx.Client(timeout=30.0) as client:
             try:
-                rows, errs = self._collect_ports(session, client, base_url)
-                total += rows
-                errors.extend(errs)
+                total += self._refresh_tracked_ports(session, client, base_url, errors)
             except Exception as exc:
-                logger.warning("PortWatch port metrics failed: %s", exc)
+                logger.warning("PortWatch port refresh failed: %s", exc)
                 errors.append(f"ports: {exc}")
-
             try:
-                rows, errs = self._collect_chokepoints(session, client, base_url)
-                total += rows
-                errors.extend(errs)
+                total += self._refresh_tracked_chokepoints(
+                    session, client, base_url, errors
+                )
             except Exception as exc:
-                logger.warning("PortWatch chokepoint metrics failed: %s", exc)
+                logger.warning("PortWatch chokepoint refresh failed: %s", exc)
                 errors.append(f"chokepoints: {exc}")
 
         session.commit()
         return CollectionResult(rows=total, errors=errors)
+
+    def _refresh_tracked_ports(
+        self, session: Session, client: httpx.Client, base_url: str, errors: list[str]
+    ) -> int:
+        tracked = session.query(Port).filter(Port.is_tracked.is_(True)).all()
+        name_map = {p.portid: p.name for p in tracked}
+        if not name_map:
+            return 0
+        latest = self._latest_date(client, base_url, _PORTS_DAILY_LAYER)
+        if latest is None:
+            return 0
+        return self._fetch_ports(
+            session, client, base_url, list(name_map), name_map,
+            date_filter=f"date=DATE '{latest}'", errors=errors,
+        )
+
+    def _refresh_tracked_chokepoints(
+        self, session: Session, client: httpx.Client, base_url: str, errors: list[str]
+    ) -> int:
+        tracked = session.query(Chokepoint).filter(Chokepoint.is_tracked.is_(True)).all()
+        name_map = {c.chokepointid: c.name for c in tracked}
+        if not name_map:
+            return 0
+        latest = self._latest_date(client, base_url, _CHOKEPOINTS_DAILY_LAYER)
+        if latest is None:
+            return 0
+        return self._fetch_chokepoints(
+            session, client, base_url, list(name_map), name_map,
+            date_filter=f"date=DATE '{latest}'", errors=errors,
+        )
+
+    # ── Per-entity 90-day backfill (called by the per-entity sync endpoint) ─────
+
+    def sync_port(self, session: Session, portid: str, name: str) -> CollectionResult:
+        settings = get_settings()
+        base_url = str(settings.portwatch_base_url).rstrip("/")
+        errors: list[str] = []
+        with httpx.Client(timeout=30.0) as client:
+            latest = self._latest_date(client, base_url, _PORTS_DAILY_LAYER)
+            if latest is None:
+                return CollectionResult(rows=0, errors=["no port data available"])
+            total = self._fetch_ports(
+                session, client, base_url, [portid], {portid: name},
+                date_filter=self._window_filter(latest), errors=errors,
+            )
+        session.commit()
+        return CollectionResult(rows=total, errors=errors)
+
+    def sync_chokepoint(
+        self, session: Session, chokepointid: str, name: str
+    ) -> CollectionResult:
+        settings = get_settings()
+        base_url = str(settings.portwatch_base_url).rstrip("/")
+        errors: list[str] = []
+        with httpx.Client(timeout=30.0) as client:
+            latest = self._latest_date(client, base_url, _CHOKEPOINTS_DAILY_LAYER)
+            if latest is None:
+                return CollectionResult(rows=0, errors=["no chokepoint data available"])
+            total = self._fetch_chokepoints(
+                session, client, base_url, [chokepointid], {chokepointid: name},
+                date_filter=self._window_filter(latest), errors=errors,
+            )
+        session.commit()
+        return CollectionResult(rows=total, errors=errors)
+
+    @staticmethod
+    def _window_filter(latest: str) -> str:
+        start = datetime.fromisoformat(str(latest)[:10]).date() - timedelta(
+            days=_BACKFILL_DAYS
+        )
+        return f"date >= DATE '{start.isoformat()}'"
+
+    # ── Shared fetch + emit ─────────────────────────────────────────────────────
+
+    def _fetch_ports(
+        self,
+        session: Session,
+        client: httpx.Client,
+        base_url: str,
+        portids: list[str],
+        name_map: dict[str, str],
+        *,
+        date_filter: str,
+        errors: list[str],
+    ) -> int:
+        total = 0
+        for chunk in _chunks(portids, _ID_CHUNK):
+            ids = ",".join(f"'{p}'" for p in chunk)
+            rows = self._query(
+                client, base_url, _PORTS_DAILY_LAYER,
+                f"{date_filter} AND portid IN ({ids})",
+                "date,portid,portname,portcalls,import,export",
+            )
+            for row in rows:
+                portid = str(row.get("portid") or "")
+                if portid not in name_map:
+                    continue
+                total += self._emit_metrics(
+                    session,
+                    entity_type="port",
+                    entity_id=portid,
+                    entity_name=row.get("portname") or name_map[portid],
+                    source_entity_id=portid,
+                    observed_at=self._row_date(row),
+                    row=row,
+                    metric_map=_PORT_METRICS,
+                    errors=errors,
+                )
+        return total
+
+    def _fetch_chokepoints(
+        self,
+        session: Session,
+        client: httpx.Client,
+        base_url: str,
+        ids_list: list[str],
+        name_map: dict[str, str],
+        *,
+        date_filter: str,
+        errors: list[str],
+    ) -> int:
+        total = 0
+        for chunk in _chunks(ids_list, _ID_CHUNK):
+            ids = ",".join(f"'{p}'" for p in chunk)
+            rows = self._query(
+                client, base_url, _CHOKEPOINTS_DAILY_LAYER,
+                f"{date_filter} AND portid IN ({ids})",
+                "date,portid,portname,n_total,capacity",
+            )
+            for row in rows:
+                cpid = str(row.get("portid") or "")
+                name = name_map.get(cpid)
+                if name is None:
+                    continue
+                total += self._emit_metrics(
+                    session,
+                    entity_type="chokepoint",
+                    entity_id=_chokepoint_entity_id(name),
+                    entity_name=name,
+                    source_entity_id=cpid,
+                    observed_at=self._row_date(row),
+                    row=row,
+                    metric_map=_CHOKEPOINT_METRICS,
+                    errors=errors,
+                )
+        return total
+
+    @staticmethod
+    def _row_date(row: dict[str, Any]) -> datetime:
+        return datetime.fromisoformat(str(row["date"])[:10]).replace(tzinfo=UTC)
 
     # ── ArcGIS query helpers ────────────────────────────────────────────────────
 
@@ -117,6 +239,7 @@ class PortWatchCollector(BaseCollector):
                 "where": where,
                 "outFields": out_fields,
                 "returnGeometry": "false",
+                "resultRecordCount": 2000,
                 "f": "json",
             },
         )
@@ -149,89 +272,6 @@ class PortWatchCollector(BaseCollector):
             return None
         maxd = feats[0]["attributes"].get("maxd")
         return str(maxd) if maxd is not None else None
-
-    # ── Ports ─────────────────────────────────────────────────────────────────
-
-    def _collect_ports(
-        self, session: Session, client: httpx.Client, base_url: str
-    ) -> tuple[int, list[str]]:
-        latest = self._latest_date(client, base_url, _PORTS_DAILY_LAYER)
-        if latest is None:
-            return 0, ["ports: no data available"]
-
-        portid_to_locode = {pid: loc for loc, pid in _PORT_PORTID.items()}
-        ids = ",".join(f"'{pid}'" for pid in _PORT_PORTID.values())
-        where = f"date=DATE '{latest}' AND portid IN ({ids})"
-        rows = self._query(
-            client,
-            base_url,
-            _PORTS_DAILY_LAYER,
-            where,
-            "date,portid,portname,portcalls,import,export",
-        )
-
-        observed_at = datetime.fromisoformat(str(latest)[:10]).replace(tzinfo=UTC)
-        total = 0
-        errors: list[str] = []
-        for row in rows:
-            portid = str(row.get("portid") or "")
-            locode = portid_to_locode.get(portid)
-            if locode is None:
-                continue
-            name = row.get("portname", "") or locode
-            total += self._emit_metrics(
-                session,
-                entity_type="port",
-                entity_id=locode,
-                entity_name=name,
-                source_entity_id=portid,
-                observed_at=observed_at,
-                row=row,
-                metric_map=_PORT_METRICS,
-                errors=errors,
-            )
-        return total, errors
-
-    # ── Chokepoints ─────────────────────────────────────────────────────────────
-
-    def _collect_chokepoints(
-        self, session: Session, client: httpx.Client, base_url: str
-    ) -> tuple[int, list[str]]:
-        latest = self._latest_date(client, base_url, _CHOKEPOINTS_DAILY_LAYER)
-        if latest is None:
-            return 0, ["chokepoints: no data available"]
-
-        portid_to_name = {pid: name for name, pid in _CHOKEPOINT_PORTID.items()}
-        ids = ",".join(f"'{pid}'" for pid in _CHOKEPOINT_PORTID.values())
-        where = f"date=DATE '{latest}' AND portid IN ({ids})"
-        rows = self._query(
-            client,
-            base_url,
-            _CHOKEPOINTS_DAILY_LAYER,
-            where,
-            "date,portid,portname,n_total,capacity",
-        )
-
-        observed_at = datetime.fromisoformat(str(latest)[:10]).replace(tzinfo=UTC)
-        total = 0
-        errors: list[str] = []
-        for row in rows:
-            portid = str(row.get("portid") or "")
-            name = portid_to_name.get(portid)
-            if name is None:
-                continue
-            total += self._emit_metrics(
-                session,
-                entity_type="chokepoint",
-                entity_id=_chokepoint_entity_id(name),
-                entity_name=name,
-                source_entity_id=portid,
-                observed_at=observed_at,
-                row=row,
-                metric_map=_CHOKEPOINT_METRICS,
-                errors=errors,
-            )
-        return total, errors
 
     # ── Shared upsert ─────────────────────────────────────────────────────────
 

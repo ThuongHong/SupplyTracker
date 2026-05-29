@@ -71,12 +71,15 @@ class GoogleNewsCollector(BaseCollector):
         total_rows = 0
         errors: list[str] = []
 
-        ports = session.query(Port).all()
-        chokepoints = session.query(Chokepoint).all()
+        # Tracked entities only — keeps GNews quota bounded.
+        ports = session.query(Port).filter(Port.is_tracked.is_(True)).all()
+        chokepoints = (
+            session.query(Chokepoint).filter(Chokepoint.is_tracked.is_(True)).all()
+        )
 
         with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
             for port in ports:
-                entity_id = port.locode or port.name
+                entity_id = port.portid
                 try:
                     inserted = self._fetch_and_upsert(
                         client=client,

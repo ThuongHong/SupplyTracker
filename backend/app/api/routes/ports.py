@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import struct
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import desc, func, select
@@ -64,7 +64,15 @@ def _bulk_latest_scores(
 
 
 def _port_entity_id(port: Port) -> str:
-    return port.locode or str(port.id)
+    return port.portid
+
+
+def _resolve_port(db: Any, port_id: str) -> Port | None:
+    """Resolve a port by portid; fall back to int surrogate id for compatibility."""
+    port = db.query(Port).filter(Port.portid == port_id).first()
+    if port is None and port_id.isdigit():
+        port = db.query(Port).filter(Port.id == int(port_id)).first()
+    return cast("Port | None", port)
 
 
 def _geom_to_coords(geom: Any) -> tuple[float, float] | None:
@@ -117,9 +125,19 @@ def list_ports(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     severity: str | None = Query(None),
+    q: str | None = Query(None, description="Case-insensitive name/country search"),
+    tracked: bool | None = Query(None, description="Filter by tracked flag"),
 ) -> PortsResponse:
-    """List ports with optional severity filter, paginated."""
+    """List ports with optional search, tracked, and severity filters, paginated."""
     base_q = db.query(Port)
+
+    if q:
+        from sqlalchemy import or_
+        like = f"%{q}%"
+        base_q = base_q.filter(or_(Port.name.ilike(like), Port.country.ilike(like)))
+
+    if tracked is not None:
+        base_q = base_q.filter(Port.is_tracked.is_(tracked))
 
     if severity is not None:
         latest_score_sq = (
@@ -145,14 +163,7 @@ def list_ports(
                 latest_score_alias.c.severity == severity
             )
         ]
-        from sqlalchemy import String as SaString
-        from sqlalchemy import cast, or_
-        base_q = base_q.filter(
-            or_(
-                Port.locode.in_(matching_ids),
-                cast(Port.id, SaString).in_(matching_ids),
-            )
-        )
+        base_q = base_q.filter(Port.portid.in_(matching_ids))
 
     total: int = base_q.count()
     ports = base_q.offset(offset).limit(limit).all()
@@ -167,10 +178,12 @@ def list_ports(
         items.append(
             PortListItem(
                 id=p.id,
+                portid=p.portid,
                 locode=p.locode,
                 name=p.name,
                 country=p.country,
                 region=p.region,
+                is_tracked=p.is_tracked,
                 severity=sev,
                 risk_score=float(score) if score is not None else None,
                 updated_at=as_of.isoformat() if as_of is not None else None,
@@ -188,12 +201,12 @@ def list_ports(
 
 @router.get("/ports/{port_id}/metrics", response_model=PortMetricsResponse)
 def get_port_metrics(
-    port_id: int,
+    port_id: str,
     db: DbSession,
     days: int = Query(_METRICS_DAYS, ge=7, le=365),
 ) -> PortMetricsResponse:
     """Return per-metric timeseries for a port over the last N days."""
-    port = db.query(Port).filter(Port.id == port_id).first()
+    port = _resolve_port(db, port_id)
     if port is None:
         raise HTTPException(status_code=404, detail=f"Port {port_id} not found")
 
@@ -222,9 +235,9 @@ def get_port_metrics(
 
 
 @router.get("/ports/{port_id}", response_model=PortDetail)
-def get_port(port_id: int, db: DbSession) -> PortDetail:
-    """Return full detail for a single port."""
-    port = db.query(Port).filter(Port.id == port_id).first()
+def get_port(port_id: str, db: DbSession) -> PortDetail:
+    """Return full detail for a single port (resolved by portid)."""
+    port = _resolve_port(db, port_id)
     if port is None:
         raise HTTPException(status_code=404, detail=f"Port {port_id} not found")
 
@@ -246,9 +259,11 @@ def get_port(port_id: int, db: DbSession) -> PortDetail:
 
     return PortDetail(
         id=port.id,
+        portid=port.portid,
         locode=port.locode,
         unlocode=port.locode,
         name=port.name,
+        is_tracked=port.is_tracked,
         country=port.country,
         region=port.region,
         radius_km=port.radius_km,
