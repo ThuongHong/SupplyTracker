@@ -36,7 +36,11 @@ _ERROR_MESSAGE = (
 def _normalise_entity_context(
     raw: list[dict[str, Any]] | dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Accept both a list (new shape) and a single dict (legacy); always return a list."""
+    """Accept both a list (new shape) and a single dict (legacy); always return a list.
+
+    TODO (next change): remove this legacy single-object branch once the frontend
+    has fully migrated to the array shape and one release window has passed.
+    """
     if isinstance(raw, dict):
         logger.warning(
             "entity_context received as single dict (deprecated); wrapping in list"
