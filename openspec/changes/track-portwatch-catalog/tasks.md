@@ -48,12 +48,12 @@
 
 ## 8. Seed + migration data
 
-- [ ] 8.1 Rework `app/scripts/seed_dev.py`: run catalog ingest → mark known 14 ports + 8 chokepoints `is_tracked=true` with their portids → optional synthetic metrics
-- [ ] 8.2 One-time backfill step (script or migration data) mapping the known set to portids
-- [ ] 8.3 Drop/ignore legacy locode-keyed `portwatch` port metrics; re-sync repopulates by portid
+- [x] 8.1 Rework `app/scripts/seed_dev.py`: run catalog ingest → mark known 14 ports + 8 chokepoints `is_tracked=true` with their portids → optional synthetic metrics
+- [x] 8.2 One-time backfill step (script or migration data) mapping the known set to portids
+- [x] 8.3 Drop/ignore legacy locode-keyed `portwatch` port metrics; re-sync repopulates by portid
 
 ## 9. Verify end-to-end
 
-- [ ] 9.1 Run catalog ingest; confirm ~2065 ports + 28 chokepoints metadata, zero metric rows written
-- [ ] 9.2 Sync one port + one chokepoint; confirm 90 days of metrics + `is_tracked=true` + dashboard renders
-- [ ] 9.3 Full `pytest`, `ruff`, `mypy` green; frontend `vitest` green
+- [x] 9.1 Run catalog ingest; confirm ~2065 ports + 28 chokepoints metadata, zero metric rows written
+- [x] 9.2 Sync one port + one chokepoint; confirm 90 days of metrics + `is_tracked=true` + dashboard renders
+- [x] 9.3 Full `pytest`, `ruff`, `mypy` green; frontend `vitest` green

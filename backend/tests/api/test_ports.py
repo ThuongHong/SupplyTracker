@@ -1,7 +1,7 @@
 """Contract tests for GET /api/v1/ports and GET /api/v1/ports/{id}."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient

@@ -68,7 +68,18 @@ def _bulk_latest_chokepoint_scores(
 
 
 def _chokepoint_entity_id(cp: Chokepoint) -> str:
-    return cp.name
+    # Matches the collector / disruption lane-map / seed convention.
+    return cp.name.lower().replace(" ", "_")
+
+
+def _resolve_chokepoint(db: Any, cid: str) -> Chokepoint | None:
+    """Resolve by chokepointid; fall back to int surrogate id for compatibility."""
+    cp: Chokepoint | None = db.query(Chokepoint).filter(
+        Chokepoint.chokepointid == cid
+    ).first()
+    if cp is None and cid.isdigit():
+        cp = db.query(Chokepoint).filter(Chokepoint.id == int(cid)).first()
+    return cp
 
 
 def _geom_to_polygon_coords(geom: Any) -> list[list[float]] | None:
@@ -196,12 +207,12 @@ def list_chokepoints(
 
 @router.get("/chokepoints/{chokepoint_id}/metrics", response_model=ChokepointMetricsResponse)
 def get_chokepoint_metrics(
-    chokepoint_id: int,
+    chokepoint_id: str,
     db: DbSession,
     days: int = Query(_METRICS_DAYS, ge=7, le=365),
 ) -> ChokepointMetricsResponse:
     """Return per-metric timeseries for a chokepoint over the last N days."""
-    cp = db.query(Chokepoint).filter(Chokepoint.id == chokepoint_id).first()
+    cp = _resolve_chokepoint(db, chokepoint_id)
     if cp is None:
         raise HTTPException(status_code=404, detail=f"Chokepoint {chokepoint_id} not found")
 
@@ -230,9 +241,9 @@ def get_chokepoint_metrics(
 
 
 @router.get("/chokepoints/{chokepoint_id}", response_model=ChokepointDetail)
-def get_chokepoint(chokepoint_id: int, db: DbSession) -> ChokepointDetail:
-    """Return full detail for a single chokepoint."""
-    cp = db.query(Chokepoint).filter(Chokepoint.id == chokepoint_id).first()
+def get_chokepoint(chokepoint_id: str, db: DbSession) -> ChokepointDetail:
+    """Return full detail for a single chokepoint (resolved by chokepointid)."""
+    cp = _resolve_chokepoint(db, chokepoint_id)
     if cp is None:
         raise HTTPException(status_code=404, detail=f"Chokepoint {chokepoint_id} not found")
 
@@ -269,9 +280,9 @@ def get_chokepoint(chokepoint_id: int, db: DbSession) -> ChokepointDetail:
 
 
 @router.get("/chokepoints/{chokepoint_id}/breakdown", response_model=ChokepointBreakdownResponse)
-def get_chokepoint_breakdown(chokepoint_id: int, db: DbSession) -> ChokepointBreakdownResponse:
+def get_chokepoint_breakdown(chokepoint_id: str, db: DbSession) -> ChokepointBreakdownResponse:
     """Return up to 50 daily per-category metric counts for a chokepoint."""
-    cp = db.query(Chokepoint).filter(Chokepoint.id == chokepoint_id).first()
+    cp = _resolve_chokepoint(db, chokepoint_id)
     if cp is None:
         raise HTTPException(status_code=404, detail=f"Chokepoint {chokepoint_id} not found")
 

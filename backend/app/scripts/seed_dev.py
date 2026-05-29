@@ -27,6 +27,25 @@ _FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 _DAYS = 90
 _SOURCE = "portwatch"
 
+# Known seed entities → PortWatch business key (matches Alembic 0004).
+_PORT_PORTID = {
+    "AEJEA": "port744", "BEANR": "port57", "CNGZH": "port425",
+    "CNNGB": "port824", "CNSHA": "port1188", "CNSZX": "port1189",
+    "CNTAO": "port1069", "CNTXG": "port1297", "HKHKG": "port474",
+    "KRPUS": "port1065", "MYPKG": "port960", "NLRTM": "port1114",
+    "SGSIN": "port1201", "USLAX": "port664",
+}
+_CHOKEPOINT_PORTID = {
+    "Suez Canal": "chokepoint1", "Panama Canal": "chokepoint2",
+    "Bab-el-Mandeb": "chokepoint4", "Strait of Malacca": "chokepoint5",
+    "Strait of Hormuz": "chokepoint6", "Strait of Gibraltar": "chokepoint8",
+    "Strait of Dover": "chokepoint9", "Lombok Strait": "chokepoint15",
+}
+
+
+def _chokepoint_entity_id(name: str) -> str:
+    return name.lower().replace(" ", "_")
+
 _PORT_METRICS: list[tuple[str, float, float, str | None]] = [
     # (metric_name, base, noise_half_range, unit)
     ("port_calls",     150.0, 30.0, None),
@@ -91,22 +110,27 @@ def _seed_ports(session: Any) -> list[dict[str, Any]]:
 
     for p in raw:
         geom = WKTElement(f"POINT({p['longitude']} {p['latitude']})", srid=4326)
+        portid = _PORT_PORTID.get(p["locode"], f"seed-{p['locode']}")
         stmt = (
             pg_insert(Port)
             .values(
+                portid=portid,
                 locode=p["locode"],
                 name=p["name"],
                 country=p["country"],
                 region=p.get("region"),
                 geom=geom,
+                is_tracked=True,
             )
             .on_conflict_do_update(
                 index_elements=["locode"],
                 set_=dict(
+                    portid=portid,
                     name=p["name"],
                     country=p["country"],
                     region=p.get("region"),
                     geom=geom,
+                    is_tracked=True,
                 ),
             )
         )
@@ -123,12 +147,13 @@ def _seed_chokepoints(session: Any) -> list[dict[str, Any]]:
     for cp in raw:
         wkt = _circle_polygon_wkt(cp["longitude"], cp["latitude"])
         geom = WKTElement(wkt, srid=4326)
+        cpid = _CHOKEPOINT_PORTID.get(cp["name"], f"seed-{cp['name']}")
         stmt = (
             pg_insert(Chokepoint)
-            .values(name=cp["name"], geom=geom)
+            .values(chokepointid=cpid, name=cp["name"], geom=geom, is_tracked=True)
             .on_conflict_do_update(
                 index_elements=["name"],
-                set_=dict(geom=geom),
+                set_=dict(chokepointid=cpid, geom=geom, is_tracked=True),
             )
         )
         session.execute(stmt)
@@ -151,7 +176,7 @@ def _seed_port_watch_metrics(
 
     # --- ports ---
     for p in ports:
-        entity_id = p["locode"] or p["name"]
+        entity_id = _PORT_PORTID.get(p["locode"], f"seed-{p['locode']}")
         entity_name = p["name"]
         # precompute trend: slight downward dip in the middle third
         mid_start = _DAYS // 3
@@ -182,7 +207,7 @@ def _seed_port_watch_metrics(
 
     # --- chokepoints ---
     for cp in chokepoints:
-        entity_id = cp["name"]
+        entity_id = _chokepoint_entity_id(cp["name"])
         entity_name = cp["name"]
         for ts in dates:
             for metric_name, base, noise_range, unit in _CHOKEPOINT_METRICS:

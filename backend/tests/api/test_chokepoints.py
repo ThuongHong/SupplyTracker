@@ -1,7 +1,6 @@
 """Contract tests for chokepoints routes."""
 from __future__ import annotations
 
-from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
