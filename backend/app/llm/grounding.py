@@ -26,6 +26,13 @@ _PER_ENTITY_TOKEN_CAP = 600
 _TOTAL_TOKEN_CAP = 2500
 
 
+def _safe_float(val: object) -> float | None:
+    """Return val as float if it is a numeric type, else None."""
+    if isinstance(val, (int, float)):
+        return float(val)
+    return None
+
+
 def _estimate_tokens(text: str) -> int:
     """Heuristic token count: ~1.33 words per token (1 token ≈ 0.75 words)."""
     return max(1, len(text.split()) * 4 // 3)
@@ -56,6 +63,15 @@ def build_entity_grounding(session: Session, entity: dict[str, Any]) -> str:  # 
     if not entity_type or not entity_id:
         return f"(skipped entity with missing type/id: {entity!r})"
 
+    try:
+        return _build_entity_grounding_inner(session, entity_type, entity_id)
+    except Exception as exc:
+        logger.warning("Entity grounding failed for %s/%s: %s", entity_type, entity_id, exc)
+        return f"Entity: {entity_type} id={entity_id} (context unavailable)"
+
+
+def _build_entity_grounding_inner(session: Session, entity_type: str, entity_id: str) -> str:  # noqa: C901
+
     lines: list[str] = []
     now = datetime.now(UTC)
     cutoff_30d = now - timedelta(days=30)
@@ -64,6 +80,7 @@ def build_entity_grounding(session: Session, entity: dict[str, Any]) -> str:  # 
     # -----------------------------------------------------------------------
     # 1. Risk score — latest + 30d stats
     # -----------------------------------------------------------------------
+    RiskModel: Any
     if entity_type == "port":
         RiskModel = PortRiskScore
         risk_filter = PortRiskScore.entity_id == entity_id
@@ -97,8 +114,8 @@ def build_entity_grounding(session: Session, entity: dict[str, Any]) -> str:  # 
             .filter(risk_filter, RiskModel.as_of >= cutoff_30d)
             .one()
         )
-        mean_30d = stats_30d[0]
-        max_30d = stats_30d[1]
+        mean_30d = _safe_float(stats_30d[0])
+        max_30d = _safe_float(stats_30d[1])
 
         risk_line = f"  Risk: latest={latest_risk.score:.2f}"
         if mean_30d is not None:
@@ -148,9 +165,9 @@ def build_entity_grounding(session: Session, entity: dict[str, Any]) -> str:  # 
                     )
                     .one()
                 )
-                mean_vessels = cong_stats[0]
-                mean_dwell = cong_stats[1]
-                max_dwell = cong_stats[2]
+                mean_vessels = _safe_float(cong_stats[0])
+                mean_dwell = _safe_float(cong_stats[1])
+                max_dwell = _safe_float(cong_stats[2])
 
                 vessel_line = f"  Vessel count latest: {latest_cong.total_in_area}"
                 if mean_vessels is not None:
@@ -197,8 +214,9 @@ def build_entity_grounding(session: Session, entity: dict[str, Any]) -> str:  # 
                     .scalar()
                 )
                 vessel_line = f"  Vessel count latest: {latest_cs.vessel_count}"
-                if cs_stats is not None:
-                    vessel_line += f"  (30d mean {cs_stats:.0f})"
+                cs_mean = _safe_float(cs_stats)
+                if cs_mean is not None:
+                    vessel_line += f"  (30d mean {cs_mean:.0f})"
                 lines.append(vessel_line)
 
     # -----------------------------------------------------------------------

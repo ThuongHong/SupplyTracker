@@ -10,7 +10,6 @@ from app.db.session import get_db
 from app.main import app
 from app.schemas.dashboard import DashboardResponse, DashboardStats, DisruptionItem, EntityInfo
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

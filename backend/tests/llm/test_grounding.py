@@ -4,11 +4,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.llm.chat import _normalise_entity_context
 from app.llm.grounding import build_entity_grounding
-
 
 # ---------------------------------------------------------------------------
 # Helpers
