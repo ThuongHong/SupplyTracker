@@ -86,7 +86,6 @@ class FBXCollector(BaseCollector):
                 index_name=index_name,
                 value=value,
                 source="fbx",
-                metadata=None,
             )
             .on_conflict_do_update(
                 index_elements=["time", "index_name"],

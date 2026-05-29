@@ -103,7 +103,6 @@ class FREDCollector(BaseCollector):
                 index_name=index_name,
                 value=value,
                 source=source,
-                metadata=None,
             )
             .on_conflict_do_update(
                 index_elements=["time", "index_name"],

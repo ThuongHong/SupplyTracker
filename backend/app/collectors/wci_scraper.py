@@ -83,7 +83,6 @@ class WCICollector(BaseCollector):
                 index_name="WCI",
                 value=value,
                 source="wci",
-                metadata=None,
             )
             .on_conflict_do_update(
                 index_elements=["time", "index_name"],

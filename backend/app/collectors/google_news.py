@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 from sqlalchemy import delete
@@ -19,6 +21,10 @@ logger = logging.getLogger(__name__)
 _GNEWS_URL = "https://gnews.io/api/v4/search"
 _PRUNE_DAYS = 90
 _HTTP_TIMEOUT = 15
+# GNews free tier enforces a ~1 req/sec burst limit (429 otherwise), independent
+# of the daily quota. Pace requests and retry on 429 with exponential backoff.
+_REQUEST_DELAY = 1.1
+_MAX_RETRIES = 4
 
 
 def _build_query(entity_type: str, name: str, locode_or_aliases: str | list[str]) -> str:
@@ -123,6 +129,34 @@ class GoogleNewsCollector(BaseCollector):
         session.commit()
         return CollectionResult(rows=total_rows, errors=errors)
 
+    def _get_with_retry(
+        self, client: httpx.Client, params: dict[str, str | int]
+    ) -> dict[str, Any]:
+        """GET with pacing + exponential backoff on 429 (GNews burst limit)."""
+        backoff = _REQUEST_DELAY
+        for attempt in range(_MAX_RETRIES):
+            resp = client.get(_GNEWS_URL, params=params)
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after else backoff
+                logger.warning(
+                    "GNews 429 — retry %d/%d after %.1fs",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    wait,
+                )
+                time.sleep(wait)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            data: dict[str, Any] = resp.json()
+            # Pace the next call to stay under the burst limit.
+            time.sleep(_REQUEST_DELAY)
+            return data
+        # Exhausted retries — surface as an error for this entity.
+        resp.raise_for_status()
+        return {}
+
     def _fetch_and_upsert(
         self,
         client: httpx.Client,
@@ -135,16 +169,14 @@ class GoogleNewsCollector(BaseCollector):
         max_items: int,
     ) -> int:
         query = _build_query(entity_type, name, locode_or_aliases)
-        params = {
+        params: dict[str, str | int] = {
             "q": query,
             "lang": "en",
             "max": min(max_items, 10),
             "apikey": api_key,
         }
 
-        resp = client.get(_GNEWS_URL, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        data = self._get_with_retry(client, params)
 
         articles = data.get("articles", [])
         if not articles:
@@ -190,8 +222,11 @@ class GoogleNewsCollector(BaseCollector):
                 .on_conflict_do_nothing(
                     index_elements=["entity_type", "entity_id", "url_hash"]
                 )
+                .returning(NewsItem.id)
             )
-            result = session.execute(stmt)
-            inserted += result.rowcount  # type: ignore[attr-defined]
+            # RETURNING yields a row only when an insert actually happened;
+            # rowcount is unreliable (-1) for ON CONFLICT DO NOTHING.
+            if session.execute(stmt).first() is not None:
+                inserted += 1
 
         return inserted

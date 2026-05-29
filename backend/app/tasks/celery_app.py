@@ -4,6 +4,17 @@ from celery import Celery
 
 from app.config import get_settings
 
+# Task modules holding @celery_app.task definitions. Listed explicitly because
+# the tasks live in named modules (collect.py, score.py, …), not the default
+# `app.tasks.tasks` that autodiscover_tasks would look for — without this the
+# worker registers zero tasks and raises KeyError on every received message.
+_TASK_MODULES = [
+    "app.tasks.collect",
+    "app.tasks.score",
+    "app.tasks.forecast",
+    "app.tasks.narrate",
+]
+
 
 def make_celery() -> Celery:
     settings = get_settings()
@@ -11,6 +22,7 @@ def make_celery() -> Celery:
         "supplytracker",
         broker=str(settings.celery_broker_url),
         backend=str(settings.celery_result_backend),
+        include=_TASK_MODULES,
     )
     app.config_from_object(
         {
@@ -25,4 +37,6 @@ def make_celery() -> Celery:
 
 
 celery_app = make_celery()
-celery_app.autodiscover_tasks(["app.tasks"])
+
+# Importing schedule registers celery_app.conf.beat_schedule for celery-beat.
+from app.tasks import schedule as _schedule  # noqa: E402,F401

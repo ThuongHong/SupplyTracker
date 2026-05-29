@@ -7,7 +7,6 @@ import pytest
 
 from app.collectors.google_news import GoogleNewsCollector
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -63,6 +62,9 @@ def _make_http_client(articles: list[dict], status_code: int = 200) -> MagicMock
 def _make_execute_result(rowcount: int = 1) -> MagicMock:
     r = MagicMock()
     r.rowcount = rowcount
+    # Inserts now count via RETURNING (.first() is a row when a row was inserted,
+    # None on conflict); prune still reads .rowcount.
+    r.first.return_value = object() if rowcount > 0 else None
     return r
 
 

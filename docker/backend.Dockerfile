@@ -23,9 +23,10 @@ RUN mkdir -p /app/backend
 # Copy source (no-op if backend/ is empty or not yet scaffolded — Bundle 3 fills this)
 COPY backend/ /app/backend/
 
-# Install in editable mode with dev extras (pytest, ruff, mypy, respx)
-RUN pip install --no-cache-dir -e "/app/backend[dev]" \
-    || echo 'backend not yet scaffolded — install at runtime'
+# Install in editable mode with dev extras (pytest, ruff, mypy, respx).
+# No fallback: a failed install must abort the build rather than silently
+# producing an image missing celery/uvicorn (caused worker exec failures).
+RUN pip install --no-cache-dir -e "/app/backend[dev]"
 
 USER app
 
