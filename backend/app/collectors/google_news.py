@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import calendar
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
-from urllib.parse import quote_plus
 
-import feedparser
+import httpx
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -18,23 +16,12 @@ from app.services.disruption import _CHOKEPOINT_LANE_MAP
 
 logger = logging.getLogger(__name__)
 
-_GOOGLE_NEWS_URL = (
-    "https://news.google.com/rss/search?q={query}&hl=en&gl=US&ceid=US:en"
-)
-_USER_AGENT = "Mozilla/5.0 (compatible; SupplyTracker/1.0)"
-
-# Set feedparser's global user agent so all fetches use it.
-feedparser.USER_AGENT = _USER_AGENT
-
+_GNEWS_URL = "https://gnews.io/api/v4/search"
 _PRUNE_DAYS = 90
+_HTTP_TIMEOUT = 15
 
 
 def _build_query(entity_type: str, name: str, locode_or_aliases: str | list[str]) -> str:
-    """Build a Google News RSS search query string.
-
-    For ports: locode_or_aliases is the LOCODE string (or empty string).
-    For chokepoints: locode_or_aliases is a list of alias terms.
-    """
     if entity_type == "port":
         locode = locode_or_aliases if isinstance(locode_or_aliases, str) else ""
         parts = [f'"{name}"']
@@ -42,21 +29,9 @@ def _build_query(entity_type: str, name: str, locode_or_aliases: str | list[str]
             parts.append(f"{locode} port")
         return " OR ".join(parts)
     else:
-        # chokepoint: name + alias terms
         aliases = locode_or_aliases if isinstance(locode_or_aliases, list) else []
         terms = [f'"{name}"'] + [f'"{alias}"' for alias in aliases]
         return " OR ".join(terms)
-
-
-def _parse_published_at(entry: feedparser.FeedParserDict) -> datetime:
-    """Parse published_at from a feedparser entry, falling back to now(UTC)."""
-    parsed = getattr(entry, "published_parsed", None)
-    if parsed is not None:
-        try:
-            return datetime.fromtimestamp(calendar.timegm(parsed), tz=UTC)
-        except Exception:
-            pass
-    return datetime.now(UTC)
 
 
 def _url_hash(url: str) -> str:
@@ -64,16 +39,10 @@ def _url_hash(url: str) -> str:
 
 
 def _chokepoint_aliases(cp_name: str) -> list[str]:
-    """Return alias terms for the given chokepoint name (excluding the name itself).
-
-    Finds the lane for this chokepoint, then collects all other keys that map
-    to the same lane.
-    """
     key = cp_name.lower().replace(" ", "_")
     lane = _CHOKEPOINT_LANE_MAP.get(key)
     if lane is None:
         return []
-    # Gather all keys that map to the same lane, excluding the current key
     return [k for k, v in _CHOKEPOINT_LANE_MAP.items() if v == lane and k != key]
 
 
@@ -87,6 +56,11 @@ class GoogleNewsCollector(BaseCollector):
             logger.info("News fetch is disabled; skipping.")
             return CollectionResult(rows=0, errors=[])
 
+        api_key = settings.gnews_api_key.get_secret_value()
+        if not api_key:
+            logger.warning("GNEWS_API_KEY not set; skipping news collection.")
+            return CollectionResult(rows=0, errors=["GNEWS_API_KEY not configured"])
+
         max_items = settings.news_max_items_per_entity
         total_rows = 0
         errors: list[str] = []
@@ -94,44 +68,46 @@ class GoogleNewsCollector(BaseCollector):
         ports = session.query(Port).all()
         chokepoints = session.query(Chokepoint).all()
 
-        # Process ports
-        for port in ports:
-            entity_id = port.locode or port.name
-            try:
-                inserted = self._fetch_and_upsert(
-                    session=session,
-                    entity_type="port",
-                    entity_id=entity_id,
-                    name=port.name,
-                    locode_or_aliases=port.locode or "",
-                    max_items=max_items,
-                )
-                total_rows += inserted
-            except Exception as exc:
-                msg = f"port {entity_id}: {exc}"
-                logger.error("GoogleNewsCollector error — %s", msg)
-                errors.append(msg)
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+            for port in ports:
+                entity_id = port.locode or port.name
+                try:
+                    inserted = self._fetch_and_upsert(
+                        client=client,
+                        session=session,
+                        api_key=api_key,
+                        entity_type="port",
+                        entity_id=entity_id,
+                        name=port.name,
+                        locode_or_aliases=port.locode or "",
+                        max_items=max_items,
+                    )
+                    total_rows += inserted
+                except Exception as exc:
+                    msg = f"port {entity_id}: {exc}"
+                    logger.error("GoogleNewsCollector error — %s", msg)
+                    errors.append(msg)
 
-        # Process chokepoints
-        for cp in chokepoints:
-            entity_id = cp.name.lower().replace(" ", "_")
-            try:
-                aliases = _chokepoint_aliases(cp.name)
-                inserted = self._fetch_and_upsert(
-                    session=session,
-                    entity_type="chokepoint",
-                    entity_id=entity_id,
-                    name=cp.name,
-                    locode_or_aliases=aliases,
-                    max_items=max_items,
-                )
-                total_rows += inserted
-            except Exception as exc:
-                msg = f"chokepoint {entity_id}: {exc}"
-                logger.error("GoogleNewsCollector error — %s", msg)
-                errors.append(msg)
+            for cp in chokepoints:
+                entity_id = cp.name.lower().replace(" ", "_")
+                try:
+                    aliases = _chokepoint_aliases(cp.name)
+                    inserted = self._fetch_and_upsert(
+                        client=client,
+                        session=session,
+                        api_key=api_key,
+                        entity_type="chokepoint",
+                        entity_id=entity_id,
+                        name=cp.name,
+                        locode_or_aliases=aliases,
+                        max_items=max_items,
+                    )
+                    total_rows += inserted
+                except Exception as exc:
+                    msg = f"chokepoint {entity_id}: {exc}"
+                    logger.error("GoogleNewsCollector error — %s", msg)
+                    errors.append(msg)
 
-        # Prune rows older than 90 days (once, after all entities)
         cutoff = datetime.now(UTC) - timedelta(days=_PRUNE_DAYS)
         try:
             result = session.execute(
@@ -149,7 +125,9 @@ class GoogleNewsCollector(BaseCollector):
 
     def _fetch_and_upsert(
         self,
+        client: httpx.Client,
         session: Session,
+        api_key: str,
         entity_type: str,
         entity_id: str,
         name: str,
@@ -157,48 +135,43 @@ class GoogleNewsCollector(BaseCollector):
         max_items: int,
     ) -> int:
         query = _build_query(entity_type, name, locode_or_aliases)
-        encoded_query = quote_plus(query)
-        url = _GOOGLE_NEWS_URL.format(query=encoded_query)
+        params = {
+            "q": query,
+            "lang": "en",
+            "max": min(max_items, 10),
+            "apikey": api_key,
+        }
 
-        try:
-            feed = feedparser.parse(url)
-        except Exception as exc:
-            raise RuntimeError(f"feedparser.parse failed for {url!r}: {exc}") from exc
+        resp = client.get(_GNEWS_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
 
-        if getattr(feed, "bozo", False) and not feed.entries:
-            bozo_exc = getattr(feed, "bozo_exception", None)
-            raise RuntimeError(f"Feed parse error for {entity_id!r}: {bozo_exc}")
-
-        entries = feed.entries
-        if not entries:
-            logger.debug("No news entries for %s %s", entity_type, entity_id)
+        articles = data.get("articles", [])
+        if not articles:
+            logger.debug("No news articles for %s %s", entity_type, entity_id)
             return 0
-
-        # Parse published_at for all entries so we can sort and cap
-        parsed_entries = []
-        for entry in entries:
-            published_at = _parse_published_at(entry)
-            parsed_entries.append((published_at, entry))
-
-        # Sort descending by published_at and cap to max_items
-        parsed_entries.sort(key=lambda t: t[0], reverse=True)
-        parsed_entries = parsed_entries[:max_items]
 
         inserted = 0
         now = datetime.now(UTC)
-        for published_at, entry in parsed_entries:
-            link = getattr(entry, "link", None) or ""
-            if not link:
+
+        for article in articles:
+            url = article.get("url", "")
+            if not url:
                 continue
 
-            title = getattr(entry, "title", "") or ""
-            summary = getattr(entry, "summary", None)
-            source_title = ""
-            raw_source = getattr(entry, "source", None)
-            if raw_source is not None:
-                source_title = getattr(raw_source, "title", "") or ""
+            title = article.get("title", "") or ""
+            description = article.get("description") or None
+            source_name = (article.get("source") or {}).get("name", "") or ""
 
-            h = _url_hash(link)
+            published_str = article.get("publishedAt", "")
+            try:
+                published_at = datetime.fromisoformat(
+                    published_str.replace("Z", "+00:00")
+                )
+            except (ValueError, AttributeError):
+                published_at = now
+
+            h = _url_hash(url)
 
             stmt = (
                 pg_insert(NewsItem)
@@ -206,11 +179,11 @@ class GoogleNewsCollector(BaseCollector):
                     entity_type=entity_type,
                     entity_id=entity_id,
                     url_hash=h,
-                    url=link,
+                    url=url,
                     title=title,
-                    source=source_title[:128],
+                    source=source_name[:128],
                     published_at=published_at,
-                    summary=summary,
+                    summary=description,
                     language="en",
                     fetched_at=now,
                 )

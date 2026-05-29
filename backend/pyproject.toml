@@ -18,7 +18,6 @@ dependencies = [
     "flower>=2.0",
     "redis>=5.1",
     "httpx>=0.27",
-    "feedparser>=6.0",
     "pandas>=2.2",
     "statsforecast>=1.7",
     "pydantic>=2.9",
@@ -65,7 +64,7 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["dashscope.*", "statsforecast.*", "geoalchemy2.*", "feedparser.*"]
+module = ["dashscope.*", "statsforecast.*", "geoalchemy2.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -88,7 +88,8 @@ class Settings(BaseSettings):
     decision_brief_cache_ttl_s: int = 3600
     chat_rate_limit_per_5min: int = 20
 
-    # News feed
+    # News feed (GNews API)
+    gnews_api_key: SecretStr = SecretStr("")
     news_fetch_enabled: bool = True
     news_max_items_per_entity: int = 30
 
