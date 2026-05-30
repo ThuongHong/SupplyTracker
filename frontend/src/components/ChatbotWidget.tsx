@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { IconX } from './ui/icons'
+import { ChatMarkdown } from './ChatMarkdown'
 import { sendChatMessage } from '../api/chat'
 import type { ChatRequest } from '../api/types'
 
@@ -130,11 +131,13 @@ export default function ChatbotWidget() {
         }
       }
 
-      // Finalize message (remove streaming flag)
+      // Finalize: drop an empty assistant placeholder (e.g. after an error),
+      // otherwise just clear the streaming flag.
       setMessages((prev) => {
         const next = [...prev]
         const last = next[next.length - 1]
         if (last && last.role === 'assistant') {
+          if (!last.content) return next.slice(0, -1)
           next[next.length - 1] = { ...last, streaming: false }
         }
         return next
@@ -229,7 +232,15 @@ export default function ChatbotWidget() {
                     : 'mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-bl-sm',
                 ].join(' ')}
               >
-                {msg.content || (msg.streaming ? <StreamingDots /> : null)}
+                {msg.content ? (
+                  msg.role === 'assistant' ? (
+                    <ChatMarkdown content={msg.content} />
+                  ) : (
+                    <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                  )
+                ) : msg.streaming ? (
+                  <StreamingDots />
+                ) : null}
               </div>
             ))}
             {error && (
