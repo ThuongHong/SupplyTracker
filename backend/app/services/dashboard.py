@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.analysis.macro_correlation import macro_sensitivity
 from app.db.models import (
     BunkerPrice,
     Chokepoint,
@@ -28,6 +29,7 @@ from app.schemas.dashboard import (
     DisruptionItem,
     EntityInfo,
     EntitySummaryResponse,
+    MacroCorrelation,
 )
 
 logger = logging.getLogger(__name__)
@@ -155,59 +157,224 @@ def build_entity_summary(
     if dash is None:
         return None
 
-    stats = dash.stats.anomaly or AnomalyStats(metric=_THROUGHPUT_METRIC.get(entity_type))
-    narrative = _summary_narrative(dash.entity.name, window, stats, dash.stats.risk_latest)
+    anomalies = _entity_anomalies(_summary_series(session, dash, _window_start(window)))
+    # Headline = most anomalous metric (max |z|), not a hardcoded throughput metric.
+    stats = (
+        anomalies[0][1]
+        if anomalies
+        else AnomalyStats(metric=_THROUGHPUT_METRIC.get(entity_type))
+    )
+    sections = _summary_sections(_summary_context(dash, anomalies))
     return EntitySummaryResponse(
-        entity=dash.entity, window=window, narrative=narrative, stats=stats
+        entity=dash.entity,
+        window=window,
+        narrative=" ".join(
+            [sections["what_happened"], sections["so_what"], sections["to_do"]]
+        ),
+        what_happened=sections["what_happened"],
+        so_what=sections["so_what"],
+        to_do=sections["to_do"],
+        stats=stats,
+        metrics=[a[1] for a in anomalies],
     )
 
 
-def _summary_narrative(
-    name: str, window: str, stats: AnomalyStats, risk_latest: float | None
-) -> str:
-    """LLM summary of one entity's throughput/anomaly picture, with a fallback."""
+# Metrics scanned for the per-entity summary (cheap z-score, no LLM cost).
+_SUMMARY_METRICS: dict[str, tuple[str, ...]] = {
+    "port": ("port_calls", "import_volume", "export_volume"),
+    "chokepoint": ("transit_calls",),
+}
 
-    def _fallback() -> str:
-        if stats.z_score is None:
-            return (
-                f"Not enough recent throughput history for {name} to run a "
-                f"probability estimate over the last {window}."
-            )
-        direction = "above" if stats.z_score >= 0 else "below"
-        parts = [
-            f"Over the last {window}, {name}'s latest throughput ({stats.metric}) "
-            f"sits {abs(stats.z_score):.2f}σ {direction} its trailing mean "
-            f"(z={stats.z_score:.2f}, p={stats.p_value:.3f}; {stats.anomaly_level} anomaly likelihood)."
-        ]
-        if risk_latest is not None:
-            parts.append(f"Latest composite risk score is {risk_latest:.2f}.")
-        return " ".join(parts)
+
+def _summary_series(
+    session: Session, dash: DashboardResponse, since: datetime
+) -> dict[str, list[dict[str, Any]]]:
+    """Per-metric time series for every metric we summarize for this entity."""
+    entity_type = dash.entity.type
+    # Port metrics are keyed by portid (== entity.id); chokepoint metrics by slug.
+    if entity_type == "chokepoint":
+        entity_key = dash.entity.name.lower().replace(" ", "_")
+    else:
+        entity_key = dash.entity.id
+    metrics = _SUMMARY_METRICS.get(entity_type, ())
+    return {
+        m: _metric_series(session, entity_type, entity_key, m, since) for m in metrics
+    }
+
+
+def _entity_anomalies(
+    series_by_metric: dict[str, list[dict[str, Any]]],
+) -> list[tuple[str, AnomalyStats, float | None]]:
+    """Z-score anomaly + window pct-change per metric, ranked by |z| descending."""
+    out: list[tuple[str, AnomalyStats, float | None]] = []
+    for metric, series in series_by_metric.items():
+        out.append((metric, _anomaly_stats(series, metric), _pct_change(series)))
+    out.sort(
+        key=lambda t: abs(t[1].z_score) if t[1].z_score is not None else -1.0,
+        reverse=True,
+    )
+    return out
+
+
+def _summary_context(
+    dash: DashboardResponse,
+    anomalies: list[tuple[str, AnomalyStats, float | None]],
+) -> dict[str, Any]:
+    """Assemble the full data picture fed to the entity-summary LLM + fallback.
+
+    Headline stats come from the most anomalous metric (anomalies[0]); other
+    notable metrics are condensed to terse one-liners to keep LLM tokens low.
+    """
+    if anomalies:
+        metric, stats, pct = anomalies[0]
+    else:
+        metric, stats, pct = None, AnomalyStats(), None
+
+    # Terse digest of OTHER elevated/high metrics (cap 3) — cheap to tokenize.
+    notable = [
+        f"{m}: z={s.z_score:.2f} ({s.anomaly_level})"
+        for m, s, _ in anomalies[1:]
+        if s.z_score is not None and s.anomaly_level in ("elevated", "high")
+    ][:3]
+
+    return {
+        "name": dash.entity.name,
+        "entity_type": dash.entity.type,
+        "window": dash.window,
+        "metric": metric,
+        "latest": stats.latest,
+        "mean": stats.mean,
+        "std": stats.std,
+        "z_score": stats.z_score,
+        "p_value": stats.p_value,
+        "anomaly_level": stats.anomaly_level,
+        "throughput_pct_change": pct,
+        "metric_anomalies": notable,
+        "risk_latest": dash.stats.risk_latest,
+        "risk_30d_mean": dash.stats.risk_30d_mean,
+        "risk_30d_max": dash.stats.risk_30d_max,
+        "vessel_count_latest": dash.stats.vessel_count_latest,
+        "macro_insights": [m.insight for m in dash.macro_sensitivity],
+        "disruptions": [f"{d.severity}: {d.explanation}" for d in dash.disruptions],
+    }
+
+
+def _pct_change(series: list[dict[str, Any]]) -> float | None:
+    if len(series) < 2:
+        return None
+    try:
+        first = float(series[0]["value"])
+        last = float(series[-1]["value"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not first:
+        return None
+    return round((last - first) / first * 100, 1)
+
+
+def _summary_sections(ctx: dict[str, Any]) -> dict[str, str]:
+    """Structured entity summary (what happened / so what / to do) with a fallback."""
+    name = ctx["name"]
+    window = ctx["window"]
+
+    def _fallback() -> dict[str, str]:
+        macro = ctx["macro_insights"][0] if ctx["macro_insights"] else None
+        disruptions = ctx["disruptions"]
+        if ctx["z_score"] is None:
+            return {
+                "what_happened": (
+                    f"Not enough recent throughput history for {name} to run a "
+                    f"probability estimate over the last {window}."
+                ),
+                "so_what": (
+                    "Without a baseline we cannot judge whether activity is normal "
+                    "or anomalous."
+                ),
+                "to_do": (
+                    "Sync more history for this entity, then re-check the anomaly view."
+                ),
+            }
+        z = ctx["z_score"]
+        direction = "above" if z >= 0 else "below"
+        pct = ctx["throughput_pct_change"]
+        trend_clause = (
+            f" Throughput is {'up' if pct >= 0 else 'down'} {abs(pct):.1f}% over the window."
+            if pct is not None
+            else ""
+        )
+        risk_clause = (
+            f" Latest composite risk score is {ctx['risk_latest']:.2f}."
+            if ctx["risk_latest"] is not None
+            else ""
+        )
+        macro_clause = f" Macro link: {macro}." if macro else ""
+        disruption_clause = (
+            f" Linked disruptions: {'; '.join(disruptions)}." if disruptions else ""
+        )
+        notable = ctx["metric_anomalies"]
+        notable_clause = (
+            f" Other metrics also off-baseline: {'; '.join(notable)}." if notable else ""
+        )
+        elevated = ctx["anomaly_level"] in ("elevated", "high")
+        return {
+            "what_happened": (
+                f"Over the last {window}, {name}'s most anomalous metric ({ctx['metric']}) "
+                f"sits {abs(z):.2f}σ {direction} its trailing mean "
+                f"(z={z:.2f}, p={ctx['p_value']:.3f})." + trend_clause + notable_clause
+            ),
+            "so_what": (
+                f"This is a {ctx['anomaly_level']} anomaly likelihood."
+                + risk_clause + macro_clause + disruption_clause
+            ),
+            "to_do": (
+                "Watch related news and downstream entities for disruption signals; "
+                "consider flagging this entity for closer monitoring."
+                if elevated or disruptions
+                else "No action needed; throughput is within its normal range."
+            ),
+        }
 
     try:
+        import json
+
         from app.llm.client import LLMResponse, chat_completion
 
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a maritime supply-chain analyst. In 2-3 sentences, "
-                    "summarize one entity's throughput situation from the given "
-                    "z-score statistics. Be factual and concise; do not invent numbers."
+                    "You are a maritime supply-chain analyst writing a briefing for a "
+                    "logistics manager. The headline metric is the entity's most "
+                    "anomalous one (`metric`); `metric_anomalies` lists other metrics "
+                    "also off-baseline. Using ALL the provided evidence (the headline "
+                    "z-score anomaly + trend, other anomalous metrics, composite risk "
+                    "score, macro-index lead-lag correlations, and linked disruptions), "
+                    "return a JSON object with exactly three string keys:\n"
+                    '  "what_happened": 1-2 sentences on the headline metric situation '
+                    "and trend, citing its z-score and percent change; mention other "
+                    "off-baseline metrics if present.\n"
+                    '  "so_what": 1-2 sentences explaining why it matters — connect the '
+                    "anomaly to the macro correlation and any linked disruption, and to "
+                    "the risk score.\n"
+                    '  "to_do": 1 concrete, specific recommended action for the manager.\n'
+                    "Be factual and concise; cite the given numbers, do not invent any. "
+                    "If a piece of evidence is absent, ignore it silently. "
+                    "Return only the JSON object."
                 ),
             },
             {
                 "role": "user",
-                "content": (
-                    f"Entity: {name}. Window: {window}. Metric: {stats.metric}. "
-                    f"latest={stats.latest}, mean={stats.mean}, std={stats.std}, "
-                    f"z_score={stats.z_score}, p_value={stats.p_value}, "
-                    f"anomaly_level={stats.anomaly_level}, risk_latest={risk_latest}."
-                ),
+                "content": json.dumps(ctx, default=str),
             },
         ]
         resp = chat_completion(messages)
         if isinstance(resp, LLMResponse) and resp.content.strip():
-            return resp.content.strip()
+            parsed = json.loads(resp.content.strip())
+            return {
+                "what_happened": str(parsed["what_happened"]).strip(),
+                "so_what": str(parsed["so_what"]).strip(),
+                "to_do": str(parsed["to_do"]).strip(),
+            }
     except Exception:
         logger.info("Entity summary LLM unavailable; using data-driven fallback.")
     return _fallback()
@@ -242,6 +409,31 @@ def _build_indices_chart(session: Session, since: datetime) -> list[dict[str, An
         elif "wci" in name_lower:
             by_date[date_str]["wci"] = r.value
     return sorted(by_date.values(), key=lambda x: x["time"])
+
+
+def _macro_series_by_name(
+    session: Session, since: datetime
+) -> dict[str, list[dict[str, Any]]]:
+    """Each freight index as its own {time,value} series (for correlation)."""
+    rows = (
+        session.query(FreightIndex)
+        .filter(FreightIndex.time >= since)
+        .order_by(FreightIndex.time)
+        .all()
+    )
+    out: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        out[r.index_name].append({"time": r.time.isoformat(), "value": r.value})
+    return dict(out)
+
+
+def _macro_findings(
+    macro_by_name: dict[str, list[dict[str, Any]]],
+    metrics_by_name: dict[str, list[dict[str, Any]]],
+) -> list[MacroCorrelation]:
+    """Compute top macro↔metric lead-lag correlations as schema objects."""
+    findings = macro_sensitivity(macro_by_name, metrics_by_name)
+    return [MacroCorrelation(**f) for f in findings]
 
 
 def _build_bunker_chart(session: Session, since: datetime) -> list[dict[str, Any]]:
@@ -389,6 +581,13 @@ def build_port_dashboard(
     indices = _build_indices_chart(session, since)
     bunker = _build_bunker_chart(session, since)
 
+    # --- Macro sensitivity (lead-lag of this port's trade vs macro indices) ---
+    port_metrics = {
+        m: _metric_series(session, "port", port.portid, m, since)
+        for m in ("port_calls", "import_volume", "export_volume")
+    }
+    macro_sens = _macro_findings(_macro_series_by_name(session, since), port_metrics)
+
     # --- Stats ---
     risk_latest: float | None = risk_rows[-1].score if risk_rows else None
     scores = [r.score for r in risk_rows if r.score is not None]
@@ -430,6 +629,7 @@ def build_port_dashboard(
             anomaly=_anomaly_stats(throughput, throughput_metric),
         ),
         disruptions=disruptions,
+        macro_sensitivity=macro_sens,
     )
 
 
@@ -498,6 +698,11 @@ def build_chokepoint_dashboard(
     indices = _build_indices_chart(session, since)
     bunker = _build_bunker_chart(session, since)
 
+    # --- Macro sensitivity (lead-lag of transit volume vs macro indices) ---
+    macro_sens = _macro_findings(
+        _macro_series_by_name(session, since), {"transit_calls": transit_volume}
+    )
+
     # --- Stats ---
     risk_latest: float | None = risk_rows[-1].score if risk_rows else None
     scores = [r.score for r in risk_rows if r.score is not None]
@@ -537,4 +742,5 @@ def build_chokepoint_dashboard(
             anomaly=_anomaly_stats(transit_volume, "transit_calls"),
         ),
         disruptions=disruptions,
+        macro_sensitivity=macro_sens,
     )

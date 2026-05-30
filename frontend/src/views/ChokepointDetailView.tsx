@@ -7,7 +7,7 @@ import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
 import { WindowPicker } from '../components/ui/WindowPicker'
 import { Tabs } from '../components/ui/Tabs'
-import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
+import { IconChevronLeft, IconStarFilled, IconRefresh } from '../components/ui/icons'
 import { navigate } from '../router'
 import { fetchChokepoint, fetchChokepointBreakdown } from '../api/chokepoints'
 import { fetchEntityDashboard } from '../api/dashboard'
@@ -16,7 +16,8 @@ import { EventLog } from '../components/EventLog'
 import { VesselMixChart } from '../components/charts/VesselMixChart'
 import { AnomalyCard } from '../components/charts/AnomalyCard'
 import { EntitySummary } from '../components/charts/EntitySummary'
-import { IndicesPanel } from '../components/charts/IndicesPanel'
+import { RiskScoreInfo } from '../components/RiskScoreInfo'
+import { MacroSensitivity } from '../components/MacroSensitivity'
 import type { ChokepointDetail, BreakdownDay, DashboardResponse } from '../api/types'
 
 interface ChokepointDetailViewProps {
@@ -30,7 +31,7 @@ function KpiStrip({ cp, latestDay }: { cp: ChokepointDetail; latestDay?: Breakdo
   const trend = cp.risk_snapshot?.trend
 
   const items = [
-    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—' },
+    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—', info: true },
     { label: 'Trend', value: trend ?? '—' },
     { label: 'Severity', value: cp.severity ?? '—' },
     {
@@ -41,12 +42,15 @@ function KpiStrip({ cp, latestDay }: { cp: ChokepointDetail; latestDay?: Breakdo
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {items.map(({ label, value }) => (
+      {items.map(({ label, value, info }) => (
         <div
           key={label}
           className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3"
         >
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+          <p className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {label}
+            {info && <RiskScoreInfo />}
+          </p>
           <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
         </div>
       ))}
@@ -108,7 +112,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
   const [syncing, setSyncing] = useState(false)
   const [untracking, setUntracking] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  const [tab, setTab] = useState<'overview' | 'summary' | 'events'>('overview')
+  const [tab, setTab] = useState<'overview' | 'events'>('overview')
   const [latestDay, setLatestDay] = useState<BreakdownDay | undefined>()
 
   const [window, setWindow] = useState<'7d' | '30d' | '90d'>(() => {
@@ -259,15 +263,10 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
                   <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Syncing…
                 </>
-              ) : isTracked ? (
-                <>
-                  <IconStarFilled className="w-4 h-4 text-amber-500" />
-                  Re-sync
-                </>
               ) : (
                 <>
-                  <IconStar className="w-4 h-4 text-gray-400" />
-                  Sync data
+                  <IconRefresh className="w-4 h-4 text-gray-400" />
+                  {isTracked ? 'Re-sync' : 'Sync data'}
                 </>
               )}
             </button>
@@ -277,8 +276,19 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
                 disabled={syncing || untracking}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 aria-label="Untrack chokepoint"
+                title="Untrack"
               >
-                {untracking ? 'Untracking…' : 'Untrack'}
+                {untracking ? (
+                  <>
+                    <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Untracking…
+                  </>
+                ) : (
+                  <>
+                    <IconStarFilled className="w-4 h-4 text-amber-500" />
+                    Untrack
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -289,19 +299,14 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       <Tabs
         tabs={[
           { key: 'overview', label: 'Overview' },
-          { key: 'summary', label: 'AI Summary' },
-          { key: 'events', label: 'Events' },
+          { key: 'events', label: 'News' },
         ]}
         active={tab}
-        onChange={(k) => setTab(k as 'overview' | 'summary' | 'events')}
+        onChange={(k) => setTab(k as 'overview' | 'events')}
       />
 
-      {tab === 'summary' && (
-        <EntitySummary entityType="chokepoint" entityId={id} window={window} reloadKey={reloadKey} />
-      )}
-
       {tab === 'events' && (
-        <Card title="Event Log">
+        <Card title="Related News">
           <EventLog entityType="chokepoint" entityId={id} />
         </Card>
       )}
@@ -310,6 +315,9 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
 
       {/* KPI Strip */}
       <KpiStrip cp={cp} latestDay={latestDay} />
+
+      {/* AI Summary — grounded in transit, macro links, disruptions */}
+      <EntitySummary entityType="chokepoint" entityId={id} window={window} reloadKey={reloadKey} />
 
       {/* Map */}
       {cp.lon != null && cp.lat != null && (
@@ -335,24 +343,21 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
         )}
       </Card>
 
+      {/* Macro sensitivity — lead-lag of transit volume vs macro indices */}
+      <Card title="Macro sensitivity">
+        {dashLoading ? (
+          <DataState status="loading" />
+        ) : (
+          <MacroSensitivity items={dashboard?.macro_sensitivity} />
+        )}
+      </Card>
+
       {/* Transit mix by vessel type (PortWatch) */}
       <Card title="Transit Mix — by vessel type">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
           <VesselMixChart data={dashboard?.charts.vessel_mix ?? []} />
-        )}
-      </Card>
-
-      {/* Macro Indices */}
-      <Card title="Macro Indices">
-        {dashLoading ? (
-          <DataState status="loading" />
-        ) : (
-          <IndicesPanel
-            indices={dashboard?.charts.indices ?? []}
-            bunker={dashboard?.charts.bunker ?? []}
-          />
         )}
       </Card>
 

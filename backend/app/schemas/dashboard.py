@@ -34,6 +34,18 @@ class DashboardStats(BaseModel):
     anomaly: AnomalyStats | None = None
 
 
+class MacroCorrelation(BaseModel):
+    """Lead-lag correlation between a macro index and an entity trade metric."""
+
+    macro: str
+    metric: str
+    r: float
+    lag_days: int
+    n: int
+    strength: str  # weak | moderate | strong
+    insight: str
+
+
 class DisruptionItem(BaseModel):
     source_entity_id: str
     source_entity_name: str
@@ -52,10 +64,15 @@ class DashboardResponse(BaseModel):
     charts: dict[str, list[dict[str, Any]]]
     stats: DashboardStats
     disruptions: list[DisruptionItem]
+    macro_sensitivity: list[MacroCorrelation] = []
 
 
 class EntitySummaryResponse(BaseModel):
     entity: EntityInfo
     window: str
     narrative: str
-    stats: AnomalyStats
+    what_happened: str
+    so_what: str
+    to_do: str
+    stats: AnomalyStats  # headline (most anomalous) metric
+    metrics: list[AnomalyStats] = []  # all summarized metrics, ranked by |z|

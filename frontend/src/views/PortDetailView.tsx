@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Card } from '../components/ui/Card'
 import { Badge, SeverityBadge } from '../components/ui/Badge'
 import { DataState } from '../components/ui/DataState'
-import { AreaChart } from '../components/ui/AreaChart'
+import { computeAnomaly } from '../lib/anomaly'
+import { formatMetric } from '../lib/format'
 import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
 import { WindowPicker } from '../components/ui/WindowPicker'
 import { Tabs } from '../components/ui/Tabs'
-import { IconChevronLeft, IconStar, IconStarFilled } from '../components/ui/icons'
+import { IconChevronLeft, IconStarFilled, IconRefresh } from '../components/ui/icons'
 import { navigate } from '../router'
 import { fetchPort, fetchPortMetrics } from '../api/ports'
 import { fetchEntityDashboard } from '../api/dashboard'
@@ -16,7 +17,8 @@ import { EventLog } from '../components/EventLog'
 import { VesselMixChart } from '../components/charts/VesselMixChart'
 import { AnomalyCard } from '../components/charts/AnomalyCard'
 import { EntitySummary } from '../components/charts/EntitySummary'
-import { IndicesPanel } from '../components/charts/IndicesPanel'
+import { RiskScoreInfo } from '../components/RiskScoreInfo'
+import { MacroSensitivity } from '../components/MacroSensitivity'
 import type { PortDetail, MetricPoint, DashboardResponse } from '../api/types'
 
 interface PortDetailViewProps {
@@ -30,7 +32,7 @@ function KpiStrip({ port }: { port: PortDetail }) {
   const trend = port.risk_snapshot?.trend
 
   const items = [
-    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—' },
+    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—', info: true },
     { label: 'Trend', value: trend ?? '—' },
     { label: 'Severity', value: port.severity ?? '—' },
     { label: 'Locode', value: port.locode ?? '—' },
@@ -38,12 +40,15 @@ function KpiStrip({ port }: { port: PortDetail }) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {items.map(({ label, value }) => (
+      {items.map(({ label, value, info }) => (
         <div
           key={label}
           className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3"
         >
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+          <p className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {label}
+            {info && <RiskScoreInfo />}
+          </p>
           <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
         </div>
       ))}
@@ -74,15 +79,14 @@ function MetricDrilldown({ portId }: { portId: number }) {
 
   const keys = Object.keys(allMetrics)
 
-  const chartData = useMemo(() => {
-    const pts = allMetrics[selected] ?? []
-    return pts.map((p) => ({ label: p.time.slice(0, 10), value: p.value }))
-  }, [selected, allMetrics])
+  const series = useMemo(() => allMetrics[selected] ?? [], [selected, allMetrics])
 
-  const currentVal = useMemo(() => {
-    const pts = allMetrics[selected] ?? []
-    return pts.length ? pts[pts.length - 1].value : null
-  }, [selected, allMetrics])
+  const anomaly = useMemo(
+    () => computeAnomaly(series.map((p) => p.value), selected),
+    [series, selected],
+  )
+
+  const currentVal = series.length ? series[series.length - 1].value : null
 
   if (loading) return <DataState status="loading" />
   if (!keys.length) {
@@ -105,7 +109,7 @@ function MetricDrilldown({ portId }: { portId: number }) {
           className="text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           {keys.map((k) => (
-            <option key={k} value={k}>{k}</option>
+            <option key={k} value={k}>{formatMetric(k)}</option>
           ))}
         </select>
         {currentVal !== null && (
@@ -114,14 +118,7 @@ function MetricDrilldown({ portId }: { portId: number }) {
           </span>
         )}
       </div>
-      {chartData.length > 0 && (
-        <AreaChart
-          data={chartData}
-          height={180}
-          series={[{ key: 'value', name: selected, color: '#6366f1', fillOpacity: 0.15 }]}
-          showLegend
-        />
-      )}
+      {series.length > 0 && <AnomalyCard series={series} stats={anomaly} />}
     </div>
   )
 }
@@ -135,7 +132,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
   const [syncing, setSyncing] = useState(false)
   const [untracking, setUntracking] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  const [tab, setTab] = useState<'overview' | 'summary' | 'events'>('overview')
+  const [tab, setTab] = useState<'overview' | 'events'>('overview')
 
   const [window, setWindow] = useState<'7d' | '30d' | '90d'>(() => {
     return (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
@@ -283,15 +280,10 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
                   <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Syncing…
                 </>
-              ) : isTracked ? (
-                <>
-                  <IconStarFilled className="w-4 h-4 text-amber-500" />
-                  Re-sync
-                </>
               ) : (
                 <>
-                  <IconStar className="w-4 h-4 text-gray-400" />
-                  Sync data
+                  <IconRefresh className="w-4 h-4 text-gray-400" />
+                  {isTracked ? 'Re-sync' : 'Sync data'}
                 </>
               )}
             </button>
@@ -301,8 +293,19 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
                 disabled={syncing || untracking}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 aria-label="Untrack port"
+                title="Untrack"
               >
-                {untracking ? 'Untracking…' : 'Untrack'}
+                {untracking ? (
+                  <>
+                    <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Untracking…
+                  </>
+                ) : (
+                  <>
+                    <IconStarFilled className="w-4 h-4 text-amber-500" />
+                    Untrack
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -313,19 +316,14 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       <Tabs
         tabs={[
           { key: 'overview', label: 'Overview' },
-          { key: 'summary', label: 'AI Summary' },
-          { key: 'events', label: 'Events' },
+          { key: 'events', label: 'News' },
         ]}
         active={tab}
-        onChange={(k) => setTab(k as 'overview' | 'summary' | 'events')}
+        onChange={(k) => setTab(k as 'overview' | 'events')}
       />
 
-      {tab === 'summary' && (
-        <EntitySummary entityType="port" entityId={id} window={window} reloadKey={reloadKey} />
-      )}
-
       {tab === 'events' && (
-        <Card title="Event Log">
+        <Card title="Related News">
           <EventLog entityType="port" entityId={id} />
         </Card>
       )}
@@ -334,6 +332,9 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
 
       {/* KPI Strip */}
       <KpiStrip port={port} />
+
+      {/* AI Summary — grounded in throughput, macro links, disruptions */}
+      <EntitySummary entityType="port" entityId={id} window={window} reloadKey={reloadKey} />
 
       {/* Map */}
       {port.lon != null && port.lat != null && (
@@ -347,20 +348,17 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         </Card>
       )}
 
-      {/* Metric drill-down */}
-      <Card title="Metric Breakdown">
+      {/* Metric drill-down — each metric with its own z-score anomaly plot */}
+      <Card title="Metric Breakdown — z-score anomaly">
         <MetricDrilldown portId={port.id} />
       </Card>
 
-      {/* Throughput anomaly (z-score hypothesis) */}
-      <Card title="Throughput anomaly (z-score)">
+      {/* Macro sensitivity — lead-lag of this port's trade vs macro indices */}
+      <Card title="Macro sensitivity">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
-          <AnomalyCard
-            series={dashboard?.charts.throughput ?? []}
-            stats={dashboard?.stats.anomaly}
-          />
+          <MacroSensitivity items={dashboard?.macro_sensitivity} />
         )}
       </Card>
 
@@ -370,18 +368,6 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
           <DataState status="loading" />
         ) : (
           <VesselMixChart data={dashboard?.charts.vessel_mix ?? []} />
-        )}
-      </Card>
-
-      {/* Macro Indices */}
-      <Card title="Macro Indices">
-        {dashLoading ? (
-          <DataState status="loading" />
-        ) : (
-          <IndicesPanel
-            indices={dashboard?.charts.indices ?? []}
-            bunker={dashboard?.charts.bunker ?? []}
-          />
         )}
       </Card>
 

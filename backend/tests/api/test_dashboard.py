@@ -239,6 +239,9 @@ class TestEntitySummary:
             entity=EntityInfo(type="port", id="SGSIN", name="Singapore"),
             window="30d",
             narrative="Throughput is elevated above its trailing mean.",
+            what_happened="Throughput is elevated above its trailing mean.",
+            so_what="This is a high anomaly likelihood.",
+            to_do="Watch related news for disruption signals.",
             stats=AnomalyStats(
                 metric="port_calls", latest=140.0, mean=100.0, std=5.0,
                 z_score=8.0, p_value=0.0, anomaly_level="high", baseline_n=88,

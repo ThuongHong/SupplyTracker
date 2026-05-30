@@ -319,7 +319,11 @@ export interface EntitySummaryResponse {
   entity: { type: string; id: string; name: string }
   window: string
   narrative: string
+  what_happened: string
+  so_what: string
+  to_do: string
   stats: AnomalyStats
+  metrics?: AnomalyStats[]
 }
 
 export interface DashboardDisruption {
@@ -333,10 +337,21 @@ export interface DashboardDisruption {
   status: string
 }
 
+export interface MacroCorrelation {
+  macro: string
+  metric: string
+  r: number
+  lag_days: number
+  n: number
+  strength: 'weak' | 'moderate' | 'strong'
+  insight: string
+}
+
 export interface DashboardResponse {
   entity: { type: string; id: string; name: string }
   window: string
   charts: EntityDashboardCharts
   stats: EntityDashboardStats
   disruptions: DashboardDisruption[]
+  macro_sensitivity?: MacroCorrelation[]
 }

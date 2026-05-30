@@ -1,6 +1,7 @@
 import React from 'react'
 import { AreaChart } from '../ui/AreaChart'
 import { DataState } from '../ui/DataState'
+import { formatMetric } from '../../lib/format'
 import type { AnomalyStats } from '../../api/types'
 
 interface Props {
@@ -83,7 +84,7 @@ export function AnomalyCard({ series, stats }: Props) {
           series={[
             { key: 'upper', name: '+2σ', color: '#f97316', fillOpacity: 0 },
             { key: 'lower', name: '−2σ', color: '#f97316', fillOpacity: 0 },
-            { key: 'value', name: stats.metric ?? 'Throughput', color: '#6366f1', fillOpacity: 0.15 },
+            { key: 'value', name: formatMetric(stats.metric), color: '#6366f1', fillOpacity: 0.15 },
           ]}
         />
       )}

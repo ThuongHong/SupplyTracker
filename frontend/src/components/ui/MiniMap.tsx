@@ -10,6 +10,8 @@ interface MiniMapProps {
   className?: string
   /** Optional marker at center */
   showMarker?: boolean
+  /** Allow pan/zoom interaction + zoom buttons (default true) */
+  interactive?: boolean
 }
 
 const FREE_STYLE_URL =
@@ -22,6 +24,7 @@ export function MiniMap({
   height = 200,
   className = '',
   showMarker = true,
+  interactive = true,
 }: MiniMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
@@ -36,13 +39,20 @@ export function MiniMap({
       center,
       zoom,
       attributionControl: false,
-      interactive: false,
+      interactive,
     })
 
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       'bottom-right',
     )
+
+    if (interactive) {
+      map.addControl(
+        new maplibregl.NavigationControl({ showCompass: false }),
+        'top-right',
+      )
+    }
 
     mapRef.current = map
 
