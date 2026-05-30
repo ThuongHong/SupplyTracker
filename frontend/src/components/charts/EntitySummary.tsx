@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Card } from '../ui/Card'
 import { DataState } from '../ui/DataState'
 import { fetchEntitySummary } from '../../api/dashboard'
@@ -17,12 +17,17 @@ export function EntitySummary({ entityType, entityId, window, reloadKey }: Props
   const [data, setData] = useState<EntitySummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Track reloadKey so we only force LLM regeneration on a sync (key bump),
+  // not on mount, window changes, or entity navigation.
+  const prevReloadKey = useRef<number>(reloadKey ?? 0)
 
   useEffect(() => {
     let cancelled = false
+    const force = (reloadKey ?? 0) > prevReloadKey.current
+    prevReloadKey.current = reloadKey ?? 0
     setLoading(true)
     setError(null)
-    fetchEntitySummary(entityType, entityId, window)
+    fetchEntitySummary(entityType, entityId, window, force)
       .then((d) => { if (!cancelled) { setData(d); setLoading(false) } })
       .catch((e: Error) => { if (!cancelled) { setError(e.message); setLoading(false) } })
     return () => { cancelled = true }
@@ -86,7 +91,7 @@ export function EntitySummary({ entityType, entityId, window, reloadKey }: Props
                   {m.z_score != null ? m.z_score.toFixed(2) : '—'}
                 </td>
                 <td className="px-3 py-1.5 text-right">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${LEVEL_CLS[m.anomaly_level ?? 'low'] ?? LEVEL_CLS.low}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${LEVEL_CLS[m.anomaly_level ?? 'low'] ?? LEVEL_CLS.low}`}>
                     {m.anomaly_level ?? '—'}
                   </span>
                 </td>

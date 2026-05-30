@@ -433,3 +433,30 @@ class NewsItem(Base):
         UniqueConstraint("entity_type", "entity_id", "url_hash", name="uq_news_item_entity_url"),
         Index("ix_news_item_entity_published_at", "entity_type", "entity_id", text("published_at DESC")),
     )
+
+
+class EntitySummaryCache(Base):
+    """Cached LLM-generated entity summary text, keyed by entity + window.
+
+    Regenerated only on sync (new data); normal page loads reuse the stored
+    text so we don't burn LLM calls on every view.
+    """
+
+    __tablename__ = "entity_summary_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entity_type: Mapped[str] = mapped_column(String(16))
+    entity_id: Mapped[str] = mapped_column(String(64))
+    window: Mapped[str] = mapped_column(String(8))
+    what_happened: Mapped[str] = mapped_column(Text)
+    so_what: Mapped[str] = mapped_column(Text)
+    to_do: Mapped[str] = mapped_column(Text)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "entity_type", "entity_id", "window", name="uq_entity_summary_cache"
+        ),
+    )

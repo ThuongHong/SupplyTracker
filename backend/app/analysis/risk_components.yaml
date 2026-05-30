@@ -1,38 +1,65 @@
-schema_version: "1.1"
+schema_version: "1.2"
 severity_thresholds: [0.3, 0.6, 0.8]  # low/elevated/high/critical boundaries
 max_missing_fraction: 0.5  # refuse to score above this
-# Components reference only metrics actually provided by PortWatch daily data:
-#   ports → port_calls, import_volume, export_volume
-#   chokepoints → transit_calls, transit_capacity
+# Baseline method: each signal is turned into a robust z-score (median / MAD)
+# vs its trailing baseline, clipped to [-3, 3], normalized to [0, 1], then
+# combined as a weighted average. See app/analysis/scoring.py.
+baseline_method: robust_median_mad
+# Components reference signals from three sources:
+#   source: portwatch  → per-entity PortWatchMetric (port_calls, volumes, transit)
+#   source: news       → per-entity recent news volume (news_item table)
+#   source: macro      → global freight-index stress overlay (freight_index table)
 # A sharp drop below baseline (higher_is_better) signals a disruption → higher risk.
+# A spike above baseline (higher_is_worse) signals stress → higher risk.
 components:
   - name: throughput
+    source: portwatch
     metric: port_calls
-    weight: 0.40
+    weight: 0.35
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [port]
   - name: import_volume
+    source: portwatch
     metric: import_volume
-    weight: 0.30
+    weight: 0.20
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [port]
   - name: export_volume
+    source: portwatch
     metric: export_volume
-    weight: 0.30
+    weight: 0.20
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [port]
   - name: transit_volume
+    source: portwatch
     metric: transit_calls
-    weight: 0.60
+    weight: 0.50
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [chokepoint]
   - name: transit_capacity
+    source: portwatch
     metric: transit_capacity
-    weight: 0.40
+    weight: 0.25
     baseline_window_days: 30
     direction: higher_is_better
     entity_types: [chokepoint]
+  # ── Cross-source signals (shared by ports + chokepoints) ──────────────────
+  - name: news_pressure
+    source: news
+    metric: news_volume_7d
+    weight: 0.15
+    baseline_window_days: 7  # bucket length; baseline = trailing buckets
+    direction: higher_is_worse
+    entity_types: [port, chokepoint]
+  - name: macro_stress
+    source: macro
+    metric: freight_index
+    index_name: FBX  # global freight rate; rising = system stress
+    weight: 0.10
+    baseline_window_days: 30
+    direction: higher_is_worse
+    entity_types: [port, chokepoint]

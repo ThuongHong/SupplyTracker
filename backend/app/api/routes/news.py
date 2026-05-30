@@ -19,18 +19,34 @@ _DEFAULT_LIMIT = 20
 _VALID_ENTITY_TYPES = {"port", "chokepoint"}
 
 
-def _entity_exists(db: DbSession, entity_type: str, entity_id: str) -> bool:
-    """Return True if the given entity exists in the database."""
+def _resolve_news_entity_id(db: DbSession, entity_type: str, raw_id: str) -> str | None:
+    """Map a path id (portid / chokepointid) to the entity_id stored in news_item.
+
+    Mirrors the resolution used by the ports/chokepoints routes so the read path
+    matches what the GoogleNewsCollector writes:
+      - port:       news entity_id == port.portid
+      - chokepoint: news entity_id == cp.name.lower().replace(" ", "_")
+    """
     if entity_type == "port":
-        row = db.query(Port).filter(Port.locode == entity_id).first()
-        if row is None:
-            row = db.query(Port).filter(Port.name == entity_id).first()
-        return row is not None
-    # chokepoint: entity_id is cp.name.lower().replace(" ", "_")
-    chokepoints = db.query(Chokepoint).all()
-    return any(
-        cp.name.lower().replace(" ", "_") == entity_id for cp in chokepoints
-    )
+        port = db.query(Port).filter(Port.portid == raw_id).first()
+        if port is None and raw_id.isdigit():
+            port = db.query(Port).filter(Port.id == int(raw_id)).first()
+        return port.portid if port else None
+
+    cp = db.query(Chokepoint).filter(Chokepoint.chokepointid == raw_id).first()
+    if cp is None and raw_id.isdigit():
+        cp = db.query(Chokepoint).filter(Chokepoint.id == int(raw_id)).first()
+    if cp is None:
+        # Accept the slug form directly (collector / lane-map convention).
+        cp = next(
+            (
+                c
+                for c in db.query(Chokepoint).all()
+                if c.name.lower().replace(" ", "_") == raw_id
+            ),
+            None,
+        )
+    return cp.name.lower().replace(" ", "_") if cp else None
 
 
 @router.get(
@@ -40,7 +56,7 @@ def _entity_exists(db: DbSession, entity_type: str, entity_id: str) -> bool:
 def list_entity_news(
     db: DbSession,
     entity_type: str = Path(description="Entity type: 'port' or 'chokepoint'"),
-    entity_id: str = Path(description="Entity identifier (locode for ports, slug for chokepoints)"),
+    entity_id: str = Path(description="Entity identifier (portid for ports, chokepointid for chokepoints)"),
     limit: int = Query(_DEFAULT_LIMIT, ge=1, description="Maximum number of items to return (capped at 100)"),
     since: datetime | None = Query(  # noqa: B008
         None,
@@ -54,7 +70,8 @@ def list_entity_news(
             detail=f"Invalid entity_type '{entity_type}'. Must be one of: {sorted(_VALID_ENTITY_TYPES)}",
         )
 
-    if not _entity_exists(db, entity_type, entity_id):
+    news_entity_id = _resolve_news_entity_id(db, entity_type, entity_id)
+    if news_entity_id is None:
         raise HTTPException(
             status_code=404,
             detail=f"{entity_type.capitalize()} '{entity_id}' not found",
@@ -66,7 +83,7 @@ def list_entity_news(
         db.query(NewsItem)
         .filter(
             NewsItem.entity_type == entity_type,
-            NewsItem.entity_id == entity_id,
+            NewsItem.entity_id == news_entity_id,
         )
         .order_by(desc(NewsItem.published_at))
     )

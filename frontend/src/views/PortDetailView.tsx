@@ -4,6 +4,7 @@ import { Badge, SeverityBadge } from '../components/ui/Badge'
 import { DataState } from '../components/ui/DataState'
 import { computeAnomaly } from '../lib/anomaly'
 import { formatMetric } from '../lib/format'
+import { RiskScoreKpi, TrendKpi, SimpleKpi } from '../components/ui/RiskKpis'
 import { MiniMap } from '../components/ui/MiniMap'
 import { InsightRow } from '../components/ui/InsightRow'
 import { WindowPicker } from '../components/ui/WindowPicker'
@@ -17,7 +18,6 @@ import { EventLog } from '../components/EventLog'
 import { VesselMixChart } from '../components/charts/VesselMixChart'
 import { AnomalyCard } from '../components/charts/AnomalyCard'
 import { EntitySummary } from '../components/charts/EntitySummary'
-import { RiskScoreInfo } from '../components/RiskScoreInfo'
 import { MacroSensitivity } from '../components/MacroSensitivity'
 import type { PortDetail, MetricPoint, DashboardResponse } from '../api/types'
 
@@ -27,45 +27,31 @@ interface PortDetailViewProps {
 
 // ─── KPI Strip ───────────────────────────────────────────────────────────────
 
-function KpiStrip({ port }: { port: PortDetail }) {
+function KpiStrip({ port, riskSeries }: { port: PortDetail; riskSeries: number[] }) {
   const score = port.risk_snapshot?.composite_score ?? port.risk_score
-  const trend = port.risk_snapshot?.trend
-
-  const items = [
-    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—', info: true },
-    { label: 'Trend', value: trend ?? '—' },
-    { label: 'Severity', value: port.severity ?? '—' },
-    { label: 'Locode', value: port.locode ?? '—' },
-  ]
-
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {items.map(({ label, value, info }) => (
-        <div
-          key={label}
-          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3"
-        >
-          <p className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {label}
-            {info && <RiskScoreInfo />}
-          </p>
-          <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
-        </div>
-      ))}
+      <RiskScoreKpi score={score} />
+      <TrendKpi riskSeries={riskSeries} />
+      <SimpleKpi label="Locode" value={port.locode ?? '—'} />
     </div>
   )
 }
 
 // ─── Metric Drill-down ────────────────────────────────────────────────────────
 
-function MetricDrilldown({ portId }: { portId: number }) {
+const WINDOW_DAYS: Record<'7d' | '30d' | '90d', number> = { '7d': 7, '30d': 30, '90d': 90 }
+
+function MetricDrilldown({ portId, window }: { portId: number; window: '7d' | '30d' | '90d' }) {
   const [allMetrics, setAllMetrics] = useState<Record<string, MetricPoint[]>>({})
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    fetchPortMetrics(portId)
+    setLoading(true)
+    // Match the entity window so the z-score baseline agrees with the AI summary.
+    fetchPortMetrics(portId, WINDOW_DAYS[window])
       .then((res) => {
         if (cancelled) return
         setAllMetrics(res.metrics)
@@ -75,7 +61,7 @@ function MetricDrilldown({ portId }: { portId: number }) {
       })
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [portId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [portId, window]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const keys = Object.keys(allMetrics)
 
@@ -331,7 +317,10 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       {tab === 'overview' && <>
 
       {/* KPI Strip */}
-      <KpiStrip port={port} />
+      <KpiStrip
+        port={port}
+        riskSeries={(dashboard?.charts.risk_trend ?? []).map((p) => p.value)}
+      />
 
       {/* AI Summary — grounded in throughput, macro links, disruptions */}
       <EntitySummary entityType="port" entityId={id} window={window} reloadKey={reloadKey} />
@@ -350,7 +339,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
 
       {/* Metric drill-down — each metric with its own z-score anomaly plot */}
       <Card title="Metric Breakdown — z-score anomaly">
-        <MetricDrilldown portId={port.id} />
+        <MetricDrilldown portId={port.id} window={window} />
       </Card>
 
       {/* Macro sensitivity — lead-lag of this port's trade vs macro indices */}

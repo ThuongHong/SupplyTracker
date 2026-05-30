@@ -8,19 +8,20 @@ from statistics import fmean, stdev
 from typing import Any
 
 from sqlalchemy import desc, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.analysis.macro_correlation import macro_sensitivity
 from app.db.models import (
     BunkerPrice,
     Chokepoint,
-    ChokepointRiskScore,
     DisruptionPropagation,
     EntityRiskForecast,
+    EntitySummaryCache,
     FreightIndex,
     Port,
-    PortRiskScore,
     PortWatchMetric,
+    RiskFeatureSnapshot,
 )
 from app.schemas.dashboard import (
     AnomalyStats,
@@ -147,9 +148,14 @@ def _anomaly_stats(series: list[dict[str, Any]], metric: str | None = None) -> A
 
 
 def build_entity_summary(
-    session: Session, entity_type: str, entity_id: str, window: str
+    session: Session, entity_type: str, entity_id: str, window: str, force: bool = False
 ) -> EntitySummaryResponse | None:
-    """Per-entity AI summary grounded in throughput trend + z-score anomaly stats."""
+    """Per-entity AI summary grounded in throughput trend + z-score anomaly stats.
+
+    Stats/metrics are always recomputed (cheap). The LLM-written sections are
+    cached per entity+window and only regenerated when ``force`` is set (sync)
+    or no cache exists yet — so normal page loads don't burn LLM calls.
+    """
     if entity_type == "port":
         dash = build_port_dashboard(session, entity_id, window)
     else:
@@ -164,7 +170,26 @@ def build_entity_summary(
         if anomalies
         else AnomalyStats(metric=_THROUGHPUT_METRIC.get(entity_type))
     )
-    sections = _summary_sections(_summary_context(dash, anomalies))
+
+    cached = (
+        session.query(EntitySummaryCache)
+        .filter(
+            EntitySummaryCache.entity_type == entity_type,
+            EntitySummaryCache.entity_id == dash.entity.id,
+            EntitySummaryCache.window == window,
+        )
+        .first()
+    )
+    if cached is not None and not force:
+        sections = {
+            "what_happened": cached.what_happened,
+            "so_what": cached.so_what,
+            "to_do": cached.to_do,
+        }
+    else:
+        sections = _summary_sections(_summary_context(dash, anomalies))
+        _upsert_summary_cache(session, entity_type, dash.entity.id, window, sections)
+
     return EntitySummaryResponse(
         entity=dash.entity,
         window=window,
@@ -177,6 +202,38 @@ def build_entity_summary(
         stats=stats,
         metrics=[a[1] for a in anomalies],
     )
+
+
+def _upsert_summary_cache(
+    session: Session,
+    entity_type: str,
+    entity_id: str,
+    window: str,
+    sections: dict[str, str],
+) -> None:
+    """Store (or replace) the generated summary text for this entity+window."""
+    stmt = (
+        pg_insert(EntitySummaryCache)
+        .values(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            window=window,
+            what_happened=sections["what_happened"],
+            so_what=sections["so_what"],
+            to_do=sections["to_do"],
+        )
+        .on_conflict_do_update(
+            index_elements=["entity_type", "entity_id", "window"],
+            set_={
+                "what_happened": sections["what_happened"],
+                "so_what": sections["so_what"],
+                "to_do": sections["to_do"],
+                "generated_at": func.now(),
+            },
+        )
+    )
+    session.execute(stmt)
+    session.commit()
 
 
 # Metrics scanned for the per-entity summary (cheap z-score, no LLM cost).
@@ -411,6 +468,27 @@ def _build_indices_chart(session: Session, since: datetime) -> list[dict[str, An
     return sorted(by_date.values(), key=lambda x: x["time"])
 
 
+def _risk_series(
+    session: Session, entity_type: str, entity_id: str, since: datetime
+) -> list[dict[str, Any]]:
+    """Dated risk-score history from RiskFeatureSnapshot (one point per day)."""
+    rows = (
+        session.query(RiskFeatureSnapshot)
+        .filter(
+            RiskFeatureSnapshot.entity_type == entity_type,
+            RiskFeatureSnapshot.entity_id == entity_id,
+            RiskFeatureSnapshot.snapshot_date >= since.date(),
+        )
+        .order_by(RiskFeatureSnapshot.snapshot_date)
+        .all()
+    )
+    return [
+        {"time": r.snapshot_date.isoformat(), "value": r.risk_score}
+        for r in rows
+        if r.risk_score is not None
+    ]
+
+
 def _macro_series_by_name(
     session: Session, since: datetime
 ) -> dict[str, list[dict[str, Any]]]:
@@ -538,21 +616,8 @@ def build_port_dashboard(
         for r in throughput_rows
     ]
 
-    # --- Risk trend ---
-    risk_rows = (
-        session.query(PortRiskScore)
-        .filter(
-            PortRiskScore.entity_id == port.portid,
-            PortRiskScore.time >= since,
-        )
-        .order_by(PortRiskScore.time)
-        .all()
-    )
-    risk_trend = [
-        {"time": r.time.isoformat(), "value": r.score}
-        for r in risk_rows
-        if r.score is not None
-    ]
+    # --- Risk trend (dated daily history) ---
+    risk_trend = _risk_series(session, "port", port.portid, since)
 
     # --- Forecast (throughput = port_calls) ---
     forecast_row = (
@@ -589,8 +654,8 @@ def build_port_dashboard(
     macro_sens = _macro_findings(_macro_series_by_name(session, since), port_metrics)
 
     # --- Stats ---
-    risk_latest: float | None = risk_rows[-1].score if risk_rows else None
-    scores = [r.score for r in risk_rows if r.score is not None]
+    scores = [p["value"] for p in risk_trend]
+    risk_latest: float | None = scores[-1] if scores else None
     risk_30d_mean = sum(scores) / len(scores) if scores else None
     risk_30d_max = max(scores) if scores else None
 
@@ -655,21 +720,8 @@ def build_chokepoint_dashboard(
     transit_volume = _metric_series(session, "chokepoint", slug, "transit_calls", since)
     vessel_mix = _category_mix(session, "chokepoint", slug, _CHOKE_CATEGORY_METRICS, since)
 
-    # --- Risk trend (ChokepointRiskScore) ---
-    risk_rows = (
-        session.query(ChokepointRiskScore)
-        .filter(
-            ChokepointRiskScore.entity_id == slug,
-            ChokepointRiskScore.time >= since,
-        )
-        .order_by(ChokepointRiskScore.time)
-        .all()
-    )
-    risk_trend = [
-        {"time": r.time.isoformat(), "value": r.score}
-        for r in risk_rows
-        if r.score is not None
-    ]
+    # --- Risk trend (dated daily history) ---
+    risk_trend = _risk_series(session, "chokepoint", slug, since)
 
     # --- Forecast ---
     forecast_row = (
@@ -704,8 +756,8 @@ def build_chokepoint_dashboard(
     )
 
     # --- Stats ---
-    risk_latest: float | None = risk_rows[-1].score if risk_rows else None
-    scores = [r.score for r in risk_rows if r.score is not None]
+    scores = [p["value"] for p in risk_trend]
+    risk_latest: float | None = scores[-1] if scores else None
     risk_30d_mean = sum(scores) / len(scores) if scores else None
     risk_30d_max = max(scores) if scores else None
 

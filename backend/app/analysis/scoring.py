@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -9,13 +10,21 @@ import yaml
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.analysis.baselines import compute_baselines, compute_z_score
+from app.analysis.baselines import (
+    compute_baselines,
+    compute_robust_z_score,
+    summarize_values,
+)
 from app.db.models import (
     ChokepointRiskScore,
+    FreightIndex,
+    NewsItem,
     PortRiskScore,
     PortWatchMetric,
     RiskFeatureSnapshot,
 )
+
+logger = logging.getLogger(__name__)
 
 # Load config once at module level
 _YAML_PATH = Path(__file__).parent / "risk_components.yaml"
@@ -30,6 +39,8 @@ class ComponentDef:
     baseline_window_days: int
     direction: str  # "higher_is_better" | "higher_is_worse"
     entity_types: list[str]
+    source: str = "portwatch"  # "portwatch" | "news" | "macro"
+    index_name: str | None = None  # for source="macro"
 
 
 def load_components() -> tuple[list[ComponentDef], dict[str, Any]]:
@@ -42,6 +53,8 @@ def load_components() -> tuple[list[ComponentDef], dict[str, Any]]:
             baseline_window_days=c["baseline_window_days"],
             direction=c["direction"],
             entity_types=c["entity_types"],
+            source=c.get("source", "portwatch"),
+            index_name=c.get("index_name"),
         )
         for c in _config["components"]
     ]
@@ -90,6 +103,93 @@ def _get_latest_metric(
     )
 
 
+def _day_end(as_of_date: date) -> datetime:
+    return datetime(
+        as_of_date.year, as_of_date.month, as_of_date.day, 23, 59, 59, tzinfo=UTC
+    )
+
+
+def _news_pressure_z(
+    session: Session,
+    entity_type: str,
+    entity_id: str,
+    as_of_date: date,
+    window_days: int,
+    n_buckets: int = 8,
+) -> float | None:
+    """Robust z-score of the latest window's news volume vs prior windows.
+
+    A surge in news coverage relative to its own trailing baseline pushes risk
+    up (direction is handled by the caller). Returns None when there is not
+    enough history to form a baseline.
+    """
+    try:
+        end = _day_end(as_of_date)
+        start = end - timedelta(days=window_days * (n_buckets + 1))
+        rows = (
+            session.query(NewsItem.published_at)
+            .filter(
+                NewsItem.entity_type == entity_type,
+                NewsItem.entity_id == entity_id,
+                NewsItem.published_at >= start,
+                NewsItem.published_at <= end,
+            )
+            .all()
+        )
+        times = [r[0] for r in rows]
+        if not times:
+            return None
+        buckets = [0] * (n_buckets + 1)
+        for t in times:
+            days_ago = (end - t).total_seconds() / 86400.0
+            idx = int(days_ago // window_days)
+            if 0 <= idx <= n_buckets:
+                buckets[idx] += 1
+        latest = float(buckets[0])
+        baseline = [float(b) for b in buckets[1:]]
+        summ = summarize_values(baseline)
+        return compute_robust_z_score(latest, summ["median"], summ["mad"])
+    except Exception:
+        logger.info("news_pressure unavailable for %s/%s", entity_type, entity_id)
+        return None
+
+
+def _macro_stress_z(
+    session: Session,
+    index_name: str | None,
+    as_of_date: date,
+    window_days: int,
+) -> float | None:
+    """Robust z-score of the latest freight-index value vs its trailing window.
+
+    Global overlay: every entity gets the same macro contribution. Rising
+    freight rates signal system-wide stress. Returns None when data is sparse.
+    """
+    try:
+        if not index_name:
+            return None
+        end = _day_end(as_of_date)
+        start = end - timedelta(days=window_days)
+        rows = (
+            session.query(FreightIndex)
+            .filter(
+                FreightIndex.index_name == index_name,
+                FreightIndex.time >= start,
+                FreightIndex.time <= end,
+            )
+            .order_by(FreightIndex.time.asc())
+            .all()
+        )
+        values = [r.value for r in rows]
+        if len(values) < 2:
+            return None
+        summ = summarize_values(values)
+        return compute_robust_z_score(values[-1], summ["median"], summ["mad"])
+    except Exception:
+        logger.info("macro_stress unavailable for index %s", index_name)
+        return None
+
+
 def score_entity(
     session: Session,
     entity_type: str,
@@ -118,50 +218,62 @@ def score_entity(
     weight_total = 0.0
 
     for comp in applicable:
-        row = _get_latest_metric(session, entity_type, entity_id, comp.metric, as_of_date)
-        if row is None:
-            missing_components.append(comp.name)
-            continue
+        # Each branch produces a robust z-score (median/MAD) for the component,
+        # or None when data is too sparse to score it.
+        z_for_score: float | None = None
 
-        value = row.metric_value
-        feature_values[comp.metric] = value
+        if comp.source == "portwatch":
+            row = _get_latest_metric(
+                session, entity_type, entity_id, comp.metric, as_of_date
+            )
+            if row is None:
+                missing_components.append(comp.name)
+                continue
 
-        # 30-day baseline (canonical window)
-        bl_30 = compute_baselines(
-            session, entity_type, entity_id, as_of_date, comp.metric, comp.baseline_window_days
-        )
-        # 90-day baseline for the snapshot's z_scores dict (informational)
-        bl_90 = compute_baselines(
-            session, entity_type, entity_id, as_of_date, comp.metric, 90
-        )
+            value = row.metric_value
+            feature_values[comp.metric] = value
 
-        baseline_values[comp.metric] = {
-            f"mean_{comp.baseline_window_days}d": bl_30["mean"],
-            f"stdev_{comp.baseline_window_days}d": bl_30["stdev"],
-            "count_30d": bl_30["count"],
-            "mean_90d": bl_90["mean"],
-            "stdev_90d": bl_90["stdev"],
-            "count_90d": bl_90["count"],
-        }
+            # 30-day baseline (canonical window)
+            bl_30 = compute_baselines(
+                session, entity_type, entity_id, as_of_date, comp.metric, comp.baseline_window_days
+            )
+            # 90-day baseline for the snapshot's z_scores dict (informational)
+            bl_90 = compute_baselines(
+                session, entity_type, entity_id, as_of_date, comp.metric, 90
+            )
 
-        z_30: float | None = None
-        z_90: float | None = None
+            baseline_values[comp.metric] = {
+                f"median_{comp.baseline_window_days}d": bl_30["median"],
+                f"mad_{comp.baseline_window_days}d": bl_30["mad"],
+                "count_30d": bl_30["count"],
+                "median_90d": bl_90["median"],
+                "mad_90d": bl_90["mad"],
+                "count_90d": bl_90["count"],
+            }
 
-        if bl_30["mean"] is not None:
-            z_30 = compute_z_score(value, bl_30["mean"], bl_30["stdev"])
-        if bl_90["mean"] is not None:
-            z_90 = compute_z_score(value, bl_90["mean"], bl_90["stdev"])
+            z_30 = compute_robust_z_score(value, bl_30["median"], bl_30["mad"])
+            z_90 = compute_robust_z_score(value, bl_90["median"], bl_90["mad"])
+            z_scores[comp.metric] = {"z_30d": z_30, "z_90d": z_90}
 
-        z_scores[comp.metric] = {"z_30d": z_30, "z_90d": z_90}
+            # Use z_30 for scoring; if unavailable fall back to z_90
+            z_for_score = z_30 if z_30 is not None else z_90
 
-        # Fix #7: when both z_30 and z_90 are None (no baseline data), treat
-        # the component as missing rather than scoring it as neutral z=0.
-        if z_30 is None and z_90 is None:
-            missing_components.append(comp.name)
-            continue
+        elif comp.source == "news":
+            z_for_score = _news_pressure_z(
+                session, entity_type, entity_id, as_of_date, comp.baseline_window_days
+            )
+            if z_for_score is not None:
+                z_scores[comp.metric] = {"z_30d": z_for_score, "z_90d": None}
 
-        # Use z_30 for scoring; if unavailable fall back to z_90
-        z_for_score = z_30 if z_30 is not None else z_90
+        elif comp.source == "macro":
+            z_for_score = _macro_stress_z(
+                session, comp.index_name, as_of_date, comp.baseline_window_days
+            )
+            if z_for_score is not None:
+                z_scores[comp.metric] = {"z_30d": z_for_score, "z_90d": None}
+
+        # Treat any component without a usable z-score as missing rather than
+        # scoring it as a neutral z=0.
         if z_for_score is None:
             missing_components.append(comp.name)
             continue
@@ -197,7 +309,9 @@ def score_entity(
     driver_metadata: dict[str, Any] = {
         "thresholds": thresholds,
         "schema_version": _config["schema_version"],
+        "baseline_method": _config.get("baseline_method", "robust_median_mad"),
         "component_weights": {c.name: c.weight for c in applicable},
+        "component_sources": {c.name: c.source for c in applicable},
     }
 
     now = datetime.now(tz=UTC)

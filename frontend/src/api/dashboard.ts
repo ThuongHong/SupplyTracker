@@ -16,9 +16,10 @@ export function fetchEntitySummary(
   entityType: string,
   entityId: string,
   window: '7d' | '30d' | '90d' = '30d',
+  force = false,
 ): Promise<EntitySummaryResponse> {
   return apiFetch<EntitySummaryResponse>(
     `/api/v1/entities/${entityType}/${entityId}/summary`,
-    { method: 'GET', params: { window } },
+    { method: 'GET', params: force ? { window, force: 'true' } : { window } },
   )
 }

@@ -5,7 +5,43 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.analysis.baselines import compute_baselines, compute_z_score
+from app.analysis.baselines import (
+    compute_baselines,
+    compute_robust_z_score,
+    compute_z_score,
+    summarize_values,
+)
+
+
+class TestRobustStats:
+    def test_summarize_values_median_mad(self) -> None:
+        s = summarize_values([10.0, 20.0, 30.0, 40.0, 100.0])
+        assert s["median"] == pytest.approx(30.0)
+        # |v - 30| = [20, 10, 0, 10, 70] → median 10
+        assert s["mad"] == pytest.approx(10.0)
+
+    def test_summarize_empty(self) -> None:
+        s = summarize_values([])
+        assert s["median"] is None and s["mad"] is None and s["count"] == 0
+
+    def test_robust_z_scales_by_mad(self) -> None:
+        # (value - median) / (1.4826 * mad)
+        z = compute_robust_z_score(45.0, 30.0, 10.0)
+        assert z == pytest.approx(15.0 / (1.4826 * 10.0))
+
+    def test_robust_z_none_when_mad_zero_or_missing(self) -> None:
+        assert compute_robust_z_score(5.0, 5.0, 0.0) is None
+        assert compute_robust_z_score(5.0, None, 2.0) is None
+        assert compute_robust_z_score(5.0, 5.0, None) is None
+
+    def test_robust_z_resists_outlier(self) -> None:
+        # An outlier inflates stdev far more than MAD, so the classic z of the
+        # outlier is smaller while the robust z flags it harder.
+        data = [10.0, 11.0, 9.0, 10.0, 100.0]
+        s = summarize_values(data)
+        robust = compute_robust_z_score(100.0, s["median"], s["mad"])
+        classic = compute_z_score(100.0, s["mean"], s["stdev"])
+        assert robust > classic
 
 
 def _make_metric_row(value: float, observed_at: datetime) -> MagicMock:
@@ -30,7 +66,13 @@ class TestComputeBaselines:
     def test_returns_none_when_no_data(self) -> None:
         session = _make_session_returning([])
         result = compute_baselines(session, "port", "P001", date(2024, 1, 15), "port_calls", 30)
-        assert result == {"mean": None, "stdev": None, "count": 0}
+        assert result == {
+            "mean": None,
+            "stdev": None,
+            "count": 0,
+            "median": None,
+            "mad": None,
+        }
 
     def test_single_row_returns_mean_no_stdev(self) -> None:
         rows = [_make_metric_row(42.0, datetime(2024, 1, 10, tzinfo=timezone.utc))]

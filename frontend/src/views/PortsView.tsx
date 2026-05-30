@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { DataState } from '../components/ui/DataState'
-import { SeverityBadge, normalizeSeverity } from '../components/ui/Badge'
-import { StatusDot } from '../components/ui/StatusDot'
+import { SeverityBadge } from '../components/ui/Badge'
 import { IconSearch } from '../components/ui/icons'
 import { navigate } from '../router'
 import { fetchPorts } from '../api/ports'
@@ -144,7 +143,6 @@ export default function PortsView() {
                   <th>Port / country</th>
                   <th>Severity</th>
                   <th>Risk score</th>
-                  <th>Status</th>
                   {canTrack && <th>Track</th>}
                 </tr>
               </thead>
@@ -161,12 +159,6 @@ export default function PortsView() {
                     </td>
                     <td><SeverityBadge severity={port.severity} /></td>
                     <td className="mono">{formatScore(port.risk_score)}</td>
-                    <td>
-                      <span className="inline-flex items-center gap-2">
-                        <StatusDot severity={port.severity} />
-                        <span className="text-sm text-[color:var(--ink-3)]">{normalizeSeverity(port.severity)}</span>
-                      </span>
-                    </td>
                     {canTrack && (
                       <td>
                         <button

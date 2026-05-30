@@ -64,6 +64,44 @@ export function IconStarFilled({ className, ...rest }: IconProps) {
   )
 }
 
+export function IconRefresh({ className, ...rest }: IconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={className}
+      {...defaultProps}
+      {...rest}
+    >
+      <path
+        fillRule="evenodd"
+        d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h1.633a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v3.443a.75.75 0 001.5 0v-1.633l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.45-.388zm1.7-5.99a.75.75 0 00-.75.75v1.633l-.312-.311A7 7 0 003.238 10.633a.75.75 0 101.45.389 5.5 5.5 0 019.201-2.466l.312.311h-1.633a.75.75 0 000 1.5h3.443a.75.75 0 00.75-.75V6.184a.75.75 0 00-.75-.75z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
+
+export function IconInfo({ className, ...rest }: IconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={className}
+      {...defaultProps}
+      {...rest}
+    >
+      <path
+        fillRule="evenodd"
+        d="M10 18a8 8 0 100-16 8 8 0 000 16zm-.25-11.25a.75.75 0 100-1.5.75.75 0 000 1.5zM9 9.25a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
+
 export function IconChevronLeft({ className, ...rest }: IconProps) {
   return (
     <svg

@@ -229,26 +229,15 @@ describe('EventLog', () => {
     vi.mocked(fetchEntityNewsMocked).mockReset()
   })
 
-  it('shows both System events and News tabs by default', async () => {
-    vi.mocked(fetchStory).mockResolvedValueOnce({ events: [], count: 0 })
+  it('fetches news on mount (no tabs)', async () => {
+    vi.mocked(fetchEntityNewsMocked).mockResolvedValueOnce({ items: [], count: 0 })
     await act(async () => {
       render(<EventLog entityType="port" entityId="SGSIN" />)
     })
-    expect(screen.getByText('System events')).toBeDefined()
-    expect(screen.getByText('News')).toBeDefined()
+    expect(vi.mocked(fetchEntityNewsMocked)).toHaveBeenCalledWith('port', 'SGSIN')
   })
 
-  it('starts on System events tab (not News)', async () => {
-    vi.mocked(fetchStory).mockResolvedValueOnce({ events: [], count: 0 })
-    await act(async () => {
-      render(<EventLog entityType="port" entityId="SGSIN" />)
-    })
-    // fetchEntityNews should NOT have been called on initial render
-    expect(vi.mocked(fetchEntityNewsMocked)).not.toHaveBeenCalled()
-  })
-
-  it('renders news items when News tab is clicked', async () => {
-    vi.mocked(fetchStory).mockResolvedValueOnce({ events: [], count: 0 })
+  it('renders news items on mount', async () => {
     vi.mocked(fetchEntityNewsMocked).mockResolvedValueOnce({
       items: [
         {
@@ -271,10 +260,6 @@ describe('EventLog', () => {
       render(<EventLog entityType="port" entityId="SGSIN" />)
     })
 
-    await act(async () => {
-      fireEvent.click(screen.getByText('News'))
-    })
-
     await waitFor(() => {
       expect(screen.getByText('Test News Title')).toBeDefined()
     })
@@ -283,7 +268,6 @@ describe('EventLog', () => {
   })
 
   it('news link opens in a new tab', async () => {
-    vi.mocked(fetchStory).mockResolvedValueOnce({ events: [], count: 0 })
     vi.mocked(fetchEntityNewsMocked).mockResolvedValueOnce({
       items: [
         {
@@ -306,10 +290,6 @@ describe('EventLog', () => {
       render(<EventLog entityType="port" entityId="SGSIN" />)
     })
 
-    await act(async () => {
-      fireEvent.click(screen.getByText('News'))
-    })
-
     await waitFor(() => {
       const link = screen.getByRole('link', { name: 'Shipping News' })
       expect(link).toHaveProperty('target', '_blank')
@@ -318,15 +298,10 @@ describe('EventLog', () => {
   })
 
   it('shows empty state message when no news items', async () => {
-    vi.mocked(fetchStory).mockResolvedValueOnce({ events: [], count: 0 })
     vi.mocked(fetchEntityNewsMocked).mockResolvedValueOnce({ items: [], count: 0 })
 
     await act(async () => {
       render(<EventLog entityType="port" entityId="SGSIN" />)
-    })
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('News'))
     })
 
     await waitFor(() => {
@@ -334,34 +309,7 @@ describe('EventLog', () => {
     })
   })
 
-  it('does not refetch news on repeated tab visits', async () => {
-    vi.mocked(fetchStory).mockResolvedValue({ events: [], count: 0 })
-    vi.mocked(fetchEntityNewsMocked).mockResolvedValue({ items: [], count: 0 })
-
-    await act(async () => {
-      render(<EventLog entityType="port" entityId="SGSIN" />)
-    })
-
-    // Click News (first time — triggers fetch)
-    await act(async () => {
-      fireEvent.click(screen.getByText('News'))
-    })
-    await waitFor(() => expect(vi.mocked(fetchEntityNewsMocked)).toHaveBeenCalledTimes(1))
-
-    // Switch back to System events, then back to News
-    await act(async () => {
-      fireEvent.click(screen.getByText('System events'))
-    })
-    await act(async () => {
-      fireEvent.click(screen.getByText('News'))
-    })
-
-    // fetchEntityNews should still have been called only once
-    expect(vi.mocked(fetchEntityNewsMocked)).toHaveBeenCalledTimes(1)
-  })
-
   it('shows source next to news items', async () => {
-    vi.mocked(fetchStory).mockResolvedValueOnce({ events: [], count: 0 })
     vi.mocked(fetchEntityNewsMocked).mockResolvedValueOnce({
       items: [
         {
@@ -382,10 +330,6 @@ describe('EventLog', () => {
 
     await act(async () => {
       render(<EventLog entityType="port" entityId="SGSIN" />)
-    })
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('News'))
     })
 
     await waitFor(() => {

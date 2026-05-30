@@ -68,13 +68,13 @@ def _make_chokepoint_mock(name: str = "Strait of Malacca") -> MagicMock:
 
 
 def _build_port_session(mock_session, port=None, news_items=None):
-    """Wire mock_session so _entity_exists(port) finds the port and the news
-    query returns *news_items*."""
+    """Wire mock_session so _resolve_news_entity_id(port) finds the port and the
+    news query returns *news_items*."""
     if news_items is None:
         news_items = []
 
-    # _entity_exists calls db.query(Port).filter(...).first() twice at most
-    # (locode first, then name). The news list query is:
+    # The resolver calls db.query(Port).filter(...).first() (by portid, then
+    # int id). The news list query is:
     # db.query(NewsItem).filter(...).order_by(...).limit(...).all()
     entity_q = MagicMock()
     entity_q.filter.return_value = entity_q
@@ -100,14 +100,20 @@ def _build_port_session(mock_session, port=None, news_items=None):
 
 
 def _build_chokepoint_session(mock_session, chokepoints=None, news_items=None):
-    """Wire mock_session so _entity_exists(chokepoint) returns a list of
-    chokepoints and the news query returns *news_items*."""
+    """Wire mock_session so _resolve_news_entity_id(chokepoint) resolves the
+    chokepoint and the news query returns *news_items*.
+
+    The resolver first tries db.query(Chokepoint).filter(...).first() (by
+    chokepointid, then int id), then falls back to db.query(Chokepoint).all()
+    to match the slug form."""
     if news_items is None:
         news_items = []
     if chokepoints is None:
         chokepoints = []
 
     cp_q = MagicMock()
+    cp_q.filter.return_value = cp_q
+    cp_q.first.return_value = chokepoints[0] if chokepoints else None
     cp_q.all.return_value = chokepoints
 
     news_q = MagicMock()

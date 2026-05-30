@@ -16,7 +16,7 @@ import { EventLog } from '../components/EventLog'
 import { VesselMixChart } from '../components/charts/VesselMixChart'
 import { AnomalyCard } from '../components/charts/AnomalyCard'
 import { EntitySummary } from '../components/charts/EntitySummary'
-import { RiskScoreInfo } from '../components/RiskScoreInfo'
+import { RiskScoreKpi, TrendKpi, SimpleKpi } from '../components/ui/RiskKpis'
 import { MacroSensitivity } from '../components/MacroSensitivity'
 import type { ChokepointDetail, BreakdownDay, DashboardResponse } from '../api/types'
 
@@ -26,34 +26,24 @@ interface ChokepointDetailViewProps {
 
 // ─── KPI Strip ───────────────────────────────────────────────────────────────
 
-function KpiStrip({ cp, latestDay }: { cp: ChokepointDetail; latestDay?: BreakdownDay }) {
+function KpiStrip({
+  cp,
+  latestDay,
+  riskSeries,
+}: {
+  cp: ChokepointDetail
+  latestDay?: BreakdownDay
+  riskSeries: number[]
+}) {
   const score = cp.risk_snapshot?.composite_score ?? cp.risk_score
-  const trend = cp.risk_snapshot?.trend
-
-  const items = [
-    { label: 'Risk Score', value: score != null ? score.toFixed(2) : '—', info: true },
-    { label: 'Trend', value: trend ?? '—' },
-    { label: 'Severity', value: cp.severity ?? '—' },
-    {
-      label: 'Latest Transit',
-      value: latestDay ? latestDay.total.toFixed(0) : '—',
-    },
-  ]
-
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {items.map(({ label, value, info }) => (
-        <div
-          key={label}
-          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3"
-        >
-          <p className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {label}
-            {info && <RiskScoreInfo />}
-          </p>
-          <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
-        </div>
-      ))}
+      <RiskScoreKpi score={score} />
+      <TrendKpi riskSeries={riskSeries} />
+      <SimpleKpi
+        label="Latest Transit"
+        value={latestDay ? latestDay.total.toFixed(0) : '—'}
+      />
     </div>
   )
 }
@@ -314,7 +304,11 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       {tab === 'overview' && <>
 
       {/* KPI Strip */}
-      <KpiStrip cp={cp} latestDay={latestDay} />
+      <KpiStrip
+        cp={cp}
+        latestDay={latestDay}
+        riskSeries={(dashboard?.charts.risk_trend ?? []).map((p) => p.value)}
+      />
 
       {/* AI Summary — grounded in transit, macro links, disruptions */}
       <EntitySummary entityType="chokepoint" entityId={id} window={window} reloadKey={reloadKey} />

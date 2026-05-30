@@ -41,10 +41,19 @@ def compute_baselines(
     )
 
     values = [r.metric_value for r in rows]
+    return summarize_values(values)
+
+
+def summarize_values(values: list[float]) -> dict[str, float | None]:
+    """Return mean/stdev plus robust median/MAD summary stats for a value list.
+
+    Robust stats (median, MAD) are spike-resistant and preferred for scoring;
+    mean/stdev are retained for backward compatibility and reporting.
+    """
     count = len(values)
 
     if count == 0:
-        return {"mean": None, "stdev": None, "count": 0}
+        return {"mean": None, "stdev": None, "count": 0, "median": None, "mad": None}
 
     mean = sum(values) / count
     if count == 1:
@@ -53,7 +62,29 @@ def compute_baselines(
         variance = sum((v - mean) ** 2 for v in values) / (count - 1)
         stdev = math.sqrt(variance)
 
-    return {"mean": mean, "stdev": stdev, "count": count}
+    median = _median(values)
+    if count == 1:
+        mad = None
+    else:
+        mad = _median([abs(v - median) for v in values])
+
+    return {
+        "mean": mean,
+        "stdev": stdev,
+        "count": count,
+        "median": median,
+        "mad": mad,
+    }
+
+
+def _median(values: list[float]) -> float:
+    """Median of a non-empty list."""
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2 == 1:
+        return s[mid]
+    return (s[mid - 1] + s[mid]) / 2.0
 
 
 def compute_z_score(value: float, mean: float, stdev: float | None) -> float | None:
@@ -61,3 +92,20 @@ def compute_z_score(value: float, mean: float, stdev: float | None) -> float | N
     if stdev is None or stdev == 0.0:
         return None
     return (value - mean) / stdev
+
+
+# Scale factor making MAD a consistent estimator of stdev for normal data.
+_MAD_TO_STDEV = 1.4826
+
+
+def compute_robust_z_score(
+    value: float, median: float | None, mad: float | None
+) -> float | None:
+    """Robust z-score: (value - median) / (1.4826 * MAD).
+
+    Returns None when median/MAD are unavailable or MAD is zero. The 1.4826
+    factor rescales MAD so the result is comparable to a classic z-score.
+    """
+    if median is None or mad is None or mad == 0.0:
+        return None
+    return (value - median) / (_MAD_TO_STDEV * mad)

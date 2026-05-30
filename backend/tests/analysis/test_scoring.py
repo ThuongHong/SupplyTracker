@@ -63,6 +63,20 @@ class TestLoadComponents:
         cp_components = [c for c in components if "chokepoint" in c.entity_types]
         assert len(cp_components) >= 2
 
+    def test_cross_source_signals_present(self) -> None:
+        components, _ = load_components()
+        by_name = {c.name: c for c in components}
+        assert by_name["news_pressure"].source == "news"
+        assert by_name["news_pressure"].direction == "higher_is_worse"
+        assert by_name["macro_stress"].source == "macro"
+        assert by_name["macro_stress"].index_name == "FBX"
+
+    def test_weights_sum_to_one_per_entity_type(self) -> None:
+        components, _ = load_components()
+        for et in ("port", "chokepoint"):
+            total = sum(c.weight for c in components if et in c.entity_types)
+            assert total == pytest.approx(1.0)
+
 
 class TestScoreEntity:
     """Test score_entity using mocked session to avoid a live DB."""
