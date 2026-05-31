@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import redis as redis_lib
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -46,3 +47,21 @@ def require_auth(
 
 
 AuthRequired = Annotated[None, Depends(require_auth)]
+
+
+# ---------------------------------------------------------------------------
+# Redis dependency
+# ---------------------------------------------------------------------------
+
+
+def get_redis() -> redis_lib.Redis:
+    """Return a Redis client built from settings.redis_url.
+
+    ``from_url`` is lazy; it does not open a socket until first use, so this is
+    cheap to construct per request and trivial to override in tests.
+    """
+    settings = get_settings()
+    return redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+
+
+RedisClient = Annotated[redis_lib.Redis, Depends(get_redis)]
