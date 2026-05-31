@@ -44,7 +44,7 @@ Every "token swap" task replaces generic Tailwind with these exact equivalents a
 | literal chart hex `#6366f1` | `var(--accent)` |
 | literal chart hex `#22c55e` | `var(--positive)` |
 
-> Severity color map (used by Badge/pill): `low→--positive`, `moderate→--caution`, `elevated→--caution`, `high→--negative`, `critical→--negative`, `unknown→--ink-4`, `info→--accent`. This matches `StatusDot.tsx`, which is **already** token-based (no change needed there).
+> Severity color map (used by Badge/pill AND StatusDot dot colors): `low→--positive`, `moderate→--caution`, `elevated→--caution`, `high→--negative`, `critical→--negative`, `unknown→--ink-4`, `info→--accent`. (Note: `high` has no distinct token — it shares `--negative` with `critical`, matching the pill map.)
 
 ---
 
@@ -474,9 +474,10 @@ git add frontend/src/components/ui/DataState.tsx
 git commit -m "refactor(ui): DataState uses .spinner + editorial tokens"
 ```
 
-### Task 7: Migrate remaining `ui/*` (RiskKpis, InsightRow, AreaChart, AskAIButton, InfoTooltip, MiniMap)
+### Task 7: Migrate remaining `ui/*` (StatusDot, RiskKpis, InsightRow, AreaChart, AskAIButton, InfoTooltip, MiniMap)
 
 **Files:**
+- Modify: `frontend/src/components/ui/StatusDot.tsx`
 - Modify: `frontend/src/components/ui/RiskKpis.tsx`
 - Modify: `frontend/src/components/ui/InsightRow.tsx`
 - Modify: `frontend/src/components/ui/AreaChart.tsx`
@@ -484,18 +485,38 @@ git commit -m "refactor(ui): DataState uses .spinner + editorial tokens"
 - Modify: `frontend/src/components/ui/InfoTooltip.tsx`
 - Modify: `frontend/src/components/ui/MiniMap.tsx`
 
-> `ui/StatusDot.tsx` is already token-based — do NOT touch it.
+- [ ] **Step 1: Migrate `StatusDot.tsx` (dot uses generic Tailwind, not tokens)**
 
-- [ ] **Step 1: Apply the swap dictionary to each file**
+The dot color map currently uses `bg-green-500 dark:bg-green-400` etc. Tailwind cannot emit `bg-[color:var(--token)]` from a `Record` value reliably with arbitrary values? It can — arbitrary values work in any class string. Replace the `colorClasses` map with token backgrounds:
+
+```tsx
+const colorClasses: Record<Severity, string> = {
+  low: 'bg-[color:var(--positive)]',
+  elevated: 'bg-[color:var(--caution)]',
+  moderate: 'bg-[color:var(--caution)]',
+  high: 'bg-[color:var(--negative)]',
+  critical: 'bg-[color:var(--negative)]',
+  unknown: 'bg-[color:var(--ink-4)]',
+}
+```
+
+Leave the rest of the file (sizes, pulse, markup) unchanged.
+
+- [ ] **Step 2: Apply the swap dictionary to the rest**
 
 Replace every dictionary class, deleting `dark:` twins. Known hits:
-- `RiskKpis.tsx` `KpiCard`: `rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4` → `card p-4`; label `text-gray-500 dark:text-gray-400` → `text-[color:var(--ink-3)]`; value `text-gray-900 dark:text-gray-100` → `text-[color:var(--ink)]`. In `DeltaBadge`, any `text-green-*` → `text-[color:var(--positive)]`, `text-red-*` → `text-[color:var(--negative)]`.
+- `RiskKpis.tsx` `KpiCard`: `rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3` → `card px-4 py-3`; label `text-gray-500 dark:text-gray-400` → `text-[color:var(--ink-3)]`; `RiskTrendInfo` tooltip `text-gray-700 dark:text-gray-200` → `text-[color:var(--ink-2)]`; `SimpleKpi` value `text-gray-900 dark:text-gray-100` → `text-[color:var(--ink)]`. (The risk/trend severity colors come from `lib/risk.ts :: severityTextClass`/`trendDisplay` — see Step 3.)
 - `AreaChart.tsx`: axis/grid `stroke` literal grays → `var(--rule-hair)`; series `#6366f1` → `var(--accent)`; any tick/label gray text → `var(--ink-3)`.
 - `AskAIButton.tsx`, `InfoTooltip.tsx`, `InsightRow.tsx`, `MiniMap.tsx`: straight dictionary swaps; `focus:outline-none focus:ring-2 focus:ring-indigo-500` → `focus-ring`.
 
-- [ ] **Step 2: Confirm no stragglers**
+- [ ] **Step 3: Check `lib/risk.ts` for generic color classes**
 
-Run: `cd frontend && grep -nE "dark:|text-gray|bg-gray|bg-white|indigo|ring-indigo|#6366f1" src/components/ui/RiskKpis.tsx src/components/ui/InsightRow.tsx src/components/ui/AreaChart.tsx src/components/ui/AskAIButton.tsx src/components/ui/InfoTooltip.tsx src/components/ui/MiniMap.tsx`
+Run: `cd frontend && grep -nE "text-green|text-red|text-amber|text-orange|text-gray|dark:" src/lib/risk.ts`
+If `severityTextClass`/`trendDisplay` return Tailwind color classes (e.g. `text-red-600`), swap them per the dictionary (`--positive`/`--caution`/`--negative`/`--ink-3`). If the grep is empty, skip.
+
+- [ ] **Step 4: Confirm no stragglers**
+
+Run: `cd frontend && grep -nE "dark:|text-gray|bg-gray|bg-white|bg-green|bg-amber|bg-orange|bg-red|indigo|ring-indigo|#6366f1" src/components/ui/StatusDot.tsx src/components/ui/RiskKpis.tsx src/components/ui/InsightRow.tsx src/components/ui/AreaChart.tsx src/components/ui/AskAIButton.tsx src/components/ui/InfoTooltip.tsx src/components/ui/MiniMap.tsx src/lib/risk.ts`
 Expected: no output.
 
 - [ ] **Step 3: Lint + test**
@@ -1257,7 +1278,7 @@ with:
 
 - [ ] **Step 3: Remove now-unused imports**
 
-`StatusDot` was used only by `AlertsRail` and the Overview tables — check: `ArteriesTable`/`PortsDigest` also use `StatusDot`, so keep it. Remove any import that `tsc` now reports as unused (run lint to find out). Keep `insights`, `insightsLoading`, `fetchInsights` (still feed `buildHeadline`, the evidence "Open anomalies" count, and the brief fallback).
+`StatusDot` is also used by `ArteriesTable`/`PortsDigest`, so keep its import. Remove any import that `tsc` now reports as unused after deleting `AlertsRail` (run lint to find out). Keep `insights`, `insightsLoading`, `fetchInsights` (still feed `buildHeadline`, the evidence "Open anomalies" count, and the brief fallback).
 
 - [ ] **Step 4: Lint + test**
 
@@ -1316,6 +1337,6 @@ git commit -m "chore: verification fixups for frontend consistency + morning bri
 
 - **Line numbers drift** as you edit. Anchors quoted as strings ("the hero `<article>`", the bottom grid block) are stable — search for them.
 - **Recharts color via CSS var:** Recharts accepts `var(--accent)` for `stroke`/`fill` string props in modern browsers. If a specific prop rejects it, read the token once via `getComputedStyle(document.documentElement).getPropertyValue('--accent')` — but try the `var()` form first.
-- **Do not touch** `ui/StatusDot.tsx` (already token-based) or the masthead/nav/tape shell (already editorial).
+- **Do not touch** the masthead/nav/tape shell (already editorial). `StatusDot` IS migrated (Task 7) — its dot colors were generic Tailwind, not tokens.
 - **`make test` vs `cd backend`:** if the backend runs only in Docker, prefix backend Python/test commands with `docker compose exec -w /app/backend backend …` per the Makefile.
 - **`/story` + `/insights` return 0 rows** in the current seed, so the brief endpoint will exercise its cache-miss → LLM path; that is expected. `make collect-all` / `make bootstrap` can seed events if you want richer brief input.
