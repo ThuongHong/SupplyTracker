@@ -46,28 +46,8 @@ export function DataState({
 function LoadingSpinner() {
   return (
     <>
-      <svg
-        className="animate-spin h-8 w-8 text-indigo-500 mb-3"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <circle
-          className="opacity-25"
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          strokeWidth="4"
-        />
-        <path
-          className="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-        />
-      </svg>
-      <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+      <span className="spinner h-8 w-8 mb-3" aria-hidden="true" />
+      <p className="text-sm text-[color:var(--ink-3)]">Loading…</p>
     </>
   )
 }
@@ -81,9 +61,9 @@ function ErrorState({
 }) {
   return (
     <>
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/30 mb-3">
+      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-[color:var(--card)] mb-3">
         <svg
-          className="h-6 w-6 text-red-600 dark:text-red-400"
+          className="h-6 w-6 text-[color:var(--negative)]"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -97,16 +77,16 @@ function ErrorState({
           />
         </svg>
       </div>
-      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+      <p className="text-sm font-medium text-[color:var(--ink)] mb-1">
         Something went wrong
       </p>
       {message && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3 max-w-xs">{message}</p>
+        <p className="text-sm text-[color:var(--ink-3)] mb-3 max-w-xs">{message}</p>
       )}
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+          className="text-sm font-medium text-[color:var(--accent)] hover:underline focus-ring"
         >
           Try again
         </button>
@@ -118,9 +98,9 @@ function ErrorState({
 function EmptyState({ message }: { message: string }) {
   return (
     <>
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 mb-3">
+      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-[color:var(--paper-2)] mb-3">
         <svg
-          className="h-6 w-6 text-gray-400 dark:text-gray-500"
+          className="h-6 w-6 text-[color:var(--ink-4)]"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -134,7 +114,7 @@ function EmptyState({ message }: { message: string }) {
           />
         </svg>
       </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
+      <p className="text-sm text-[color:var(--ink-3)]">{message}</p>
     </>
   )
 }
