@@ -5,7 +5,7 @@ interface SparklineProps {
   data: number[]
   width?: number
   height?: number
-  /** Stroke color — defaults to indigo */
+  /** Stroke color; defaults to the accent token. */
   color?: string
   className?: string
 }
@@ -18,7 +18,7 @@ export function Sparkline({
   data,
   width = 80,
   height = 28,
-  color = '#6366f1',
+  color = 'var(--accent)',
   className = '',
 }: SparklineProps) {
   const path = useMemo(() => {

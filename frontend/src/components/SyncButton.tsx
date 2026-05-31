@@ -31,12 +31,12 @@ export function SyncButton() {
       <button
         onClick={handleClick}
         disabled={disabled}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 border border-[color:var(--rule-thin)] text-sm font-medium transition-colors hover:bg-[color:var(--paper-2)] focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Sync
       </button>
       {status && (
-        <span className={`text-xs ${isError ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+        <span className={`text-xs ${isError ? 'text-[color:var(--negative)]' : 'text-[color:var(--positive)]'}`}>
           {status}
         </span>
       )}

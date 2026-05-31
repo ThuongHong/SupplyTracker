@@ -5,7 +5,7 @@ import { InfoTooltip } from './ui/InfoTooltip'
 export function RiskScoreInfo() {
   return (
     <InfoTooltip label="How this risk score is computed">
-      <span className="block font-semibold text-gray-700 dark:text-gray-200">
+      <span className="block font-semibold text-[color:var(--ink-2)]">
         How this risk score is computed
       </span>
       <span className="mt-1 block">

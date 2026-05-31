@@ -7,7 +7,7 @@ interface Props {
 }
 
 const series = [
-  { key: 'value', name: 'Vessel count', color: '#6366f1', fillOpacity: 0.2 },
+  { key: 'value', name: 'Vessel count', color: 'var(--accent)', fillOpacity: 0.2 },
 ]
 
 export function VesselCountChart({ data }: Props) {

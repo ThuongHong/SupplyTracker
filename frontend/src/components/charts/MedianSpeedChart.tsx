@@ -7,7 +7,7 @@ interface Props {
 }
 
 const series = [
-  { key: 'value', name: 'Median speed (kts)', color: '#22c55e', fillOpacity: 0.2 },
+  { key: 'value', name: 'Median speed (kts)', color: 'var(--positive)', fillOpacity: 0.2 },
 ]
 
 export function MedianSpeedChart({ data }: Props) {
