@@ -133,16 +133,16 @@ describe('WindowPicker', () => {
     expect(handler).toHaveBeenCalledWith('90d')
   })
 
-  it('selected option has bg-white class', () => {
+  it('selected option has active class', () => {
     render(<WindowPicker value="30d" onChange={() => {}} />)
     const button = screen.getByText('30d')
-    expect(button.className).toContain('bg-white')
+    expect(button.className).toContain('seg__btn--active')
   })
 
-  it('unselected options do not have bg-white class', () => {
+  it('unselected options do not have active class', () => {
     render(<WindowPicker value="30d" onChange={() => {}} />)
     const button7d = screen.getByText('7d')
-    expect(button7d.className).not.toContain('bg-white')
+    expect(button7d.className).not.toContain('seg__btn--active')
   })
 })
 
