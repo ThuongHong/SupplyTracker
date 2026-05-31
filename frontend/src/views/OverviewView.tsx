@@ -2,14 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { AreaChart } from '../components/ui/AreaChart'
 import { DataState } from '../components/ui/DataState'
 import { MarketBrief } from '../components/MarketBrief'
+import { ChatMarkdown } from '../components/ChatMarkdown'
 import { SeverityBadge, normalizeSeverity } from '../components/ui/Badge'
 import { StatusDot } from '../components/ui/StatusDot'
 import { navigate } from '../router'
+import { fetchBrief, getCachedBrief } from '../api/brief'
 import { fetchChokepoints } from '../api/chokepoints'
 import { fetchIndices, fetchIndexTimeseries } from '../api/indices'
 import { fetchInsights } from '../api/insights'
 import { fetchPorts } from '../api/ports'
 import { tracked } from '../data/tracked'
+import { buildFallbackBrief } from '../lib/briefFallback'
 import type { ChokepointSummary, IndexSummary, InsightItem, PortSummary } from '../api/types'
 
 type Range = 7 | 30 | 90
@@ -304,58 +307,6 @@ function PortsDigest({ ports, loading }: { ports: PortSummary[]; loading: boolea
   )
 }
 
-function AlertsRail({ insights }: { insights: InsightItem[] }) {
-  const alerts = insights
-    .filter((item) => item.attention_level === 'critical' || item.attention_level === 'high')
-    .slice(0, 5)
-
-  return (
-    <aside className="space-y-6">
-      <section className="space-y-4">
-        <div className="section__head">
-          <div>
-            <p className="label-cap">Last 24h</p>
-            <h2 className="text-3xl">Alerts</h2>
-          </div>
-        </div>
-        {alerts.length ? (
-          <div className="space-y-3">
-            {alerts.map((item) => (
-              <article key={item.id} className="anomaly p-4">
-                <div className="flex items-center gap-2">
-                  <StatusDot severity={item.attention_level} />
-                  <p className="label-cap">{item.entity_name ?? item.entity_type ?? 'Signal'}</p>
-                </div>
-                <h3 className="serif mt-2 text-xl leading-snug text-[color:var(--ink)]">{item.title}</h3>
-                {item.narrative && (
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--ink-2)]">{item.narrative}</p>
-                )}
-                <p className="mono mt-3 text-xs text-[color:var(--ink-4)]">
-                  {item.timestamp ? item.timestamp.slice(0, 16).replace('T', ' ') : 'Live'}
-                </p>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="border border-[color:var(--rule-thin)] bg-[color:var(--card)] p-4 text-sm text-[color:var(--ink-3)]">
-            No active alerts
-          </p>
-        )}
-      </section>
-
-      <section className="border border-[color:var(--rule-thin)] bg-[color:var(--card)] p-5">
-        <p className="label-cap">Story</p>
-        <h2 className="serif mt-2 text-3xl leading-tight text-[color:var(--ink)]">
-          Watch the narrow lanes first.
-        </h2>
-        <p className="mt-3 text-sm leading-6 text-[color:var(--ink-2)]">
-          SupplyTracker is reading fresh port, chokepoint, and index movements against the live risk tape.
-        </p>
-      </section>
-    </aside>
-  )
-}
-
 export default function OverviewView() {
   const [ports, setPorts] = useState<PortSummary[]>([])
   const [portsLoading, setPortsLoading] = useState(true)
@@ -368,6 +319,11 @@ export default function OverviewView() {
   const [insightsLoading, setInsightsLoading] = useState(true)
   const [trackedPortIds, setTrackedPortIds] = useState<Set<string>>(() => new Set(tracked.ports.getAll()))
   const marketWindow = (localStorage.getItem('entity_window') as '7d' | '30d' | '90d') || '30d'
+  const cachedBrief = getCachedBrief()
+  const [brief, setBrief] = useState<string | null>(() => cachedBrief?.brief ?? null)
+  const [briefAsOf, setBriefAsOf] = useState<string | null>(() => cachedBrief?.as_of ?? null)
+  const [briefLoading, setBriefLoading] = useState(!cachedBrief)
+  const [briefFailed, setBriefFailed] = useState(false)
 
   useEffect(() => tracked.ports.subscribe(() => setTrackedPortIds(new Set(tracked.ports.getAll()))), [])
 
@@ -391,6 +347,25 @@ export default function OverviewView() {
       .then((res) => setInsights(res.items))
       .catch(() => undefined)
       .finally(() => setInsightsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchBrief()
+      .then((res) => {
+        if (cancelled) return
+        setBrief(res.brief)
+        setBriefAsOf(res.as_of)
+        setBriefLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setBriefFailed(true)
+        setBriefLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const sortedPorts = useMemo(() => {
@@ -418,18 +393,30 @@ export default function OverviewView() {
           <h1 className="serif mt-3 text-5xl font-semibold leading-[0.96] text-[color:var(--ink)] md:text-7xl">
             {buildHeadline(insights, indices)}
           </h1>
-          <p className="serif mt-5 max-w-3xl text-2xl italic leading-snug text-[color:var(--ink-2)]">
-            The tape blends freight indices, live port risk, and chokepoint pressure into a single operating read.
-          </p>
-          <p className="label-cap mt-5">By SupplyTracker risk desk</p>
-          <div className="mt-6 columns-1 gap-8 text-sm leading-7 text-[color:var(--ink-2)] md:columns-2">
-            <p>
-              Port congestion and artery disruptions remain the leading signals for the current session.
-              Tracked terminals are sorted into the digest first, while the alerts rail keeps critical insights in view.
-            </p>
-            <p>
-              Index movement is shown with 7D, 30D, and 90D windows so analysts can separate daily noise from durable freight pressure.
-            </p>
+          <p className="label-cap mt-5">By SupplyTracker risk desk{briefAsOf ? ` · as of ${briefAsOf}` : ''}</p>
+          <div className="mt-6 max-w-3xl text-[color:var(--ink-2)]">
+            {briefLoading ? (
+              <div className="space-y-3" aria-hidden="true">
+                <div className="h-4 w-full bg-[color:var(--paper-2)]" />
+                <div className="h-4 w-11/12 bg-[color:var(--paper-2)]" />
+                <div className="h-4 w-9/12 bg-[color:var(--paper-2)]" />
+              </div>
+            ) : (
+              <ChatMarkdown
+                content={
+                  briefFailed || !brief
+                    ? buildFallbackBrief({
+                        topRiskTitle:
+                          insights.find(
+                            (item) => item.attention_level === 'critical' || item.attention_level === 'high',
+                          )?.title ?? null,
+                        bdiChangePct7d: bdi?.change_pct_7d ?? null,
+                        congestedPorts,
+                      })
+                    : brief
+                }
+              />
+            )}
           </div>
         </article>
 
@@ -456,16 +443,13 @@ export default function OverviewView() {
 
       <MarketPanel indices={indices} loading={indicesLoading} />
 
-      <div className="grid gap-8 lg:grid-cols-[2.3fr_1fr]">
-        <main className="space-y-10">
-          <ArteriesTable chokepoints={sortedChokepoints} loading={chokepointsLoading} />
-          {portsError ? (
-            <DataState status="error" error={portsError} />
-          ) : (
-            <PortsDigest ports={sortedPorts} loading={portsLoading} />
-          )}
-        </main>
-        {insightsLoading ? <DataState status="loading" /> : <AlertsRail insights={insights} />}
+      <div className="space-y-10">
+        <ArteriesTable chokepoints={sortedChokepoints} loading={chokepointsLoading} />
+        {portsError ? (
+          <DataState status="error" error={portsError} />
+        ) : (
+          <PortsDigest ports={sortedPorts} loading={portsLoading} />
+        )}
       </div>
     </div>
   )
