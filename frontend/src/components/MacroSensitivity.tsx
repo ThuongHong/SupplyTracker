@@ -10,13 +10,13 @@ const EMPTY =
 
 function dirColor(r: number): string {
   return r < 0
-    ? 'text-rose-600 dark:text-rose-400'
-    : 'text-emerald-600 dark:text-emerald-400'
+    ? 'text-[color:var(--negative)]'
+    : 'text-[color:var(--positive)]'
 }
 
 export function MacroSensitivity({ items }: Props) {
   if (!items || items.length === 0) {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">{EMPTY}</p>
+    return <p className="text-sm text-[color:var(--ink-3)]">{EMPTY}</p>
   }
 
   return (
@@ -35,16 +35,16 @@ export function MacroSensitivity({ items }: Props) {
               {it.r >= 0 ? '+' : ''}
               {it.r.toFixed(2)}
             </span>
-            <span className="text-gray-700 dark:text-gray-300">{it.insight}</span>
+            <span className="text-[color:var(--ink-2)]">{it.insight}</span>
             {weak && (
-              <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              <span className="text-[10px] uppercase tracking-wide text-[color:var(--ink-4)]">
                 weak
               </span>
             )}
           </div>
         )
       })}
-      <p className="text-[11px] text-gray-400 dark:text-gray-500 pt-1">
+      <p className="text-[11px] text-[color:var(--ink-4)] pt-1">
         Exploratory lead-lag correlation; small samples can mislead. n = overlapping days.
       </p>
     </div>

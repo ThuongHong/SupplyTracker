@@ -10,9 +10,9 @@ interface Props {
 }
 
 const LEVEL_STYLE: Record<string, { label: string; cls: string }> = {
-  low: { label: 'Low', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
-  elevated: { label: 'Elevated', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
-  high: { label: 'High', cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  low: { label: 'Low', cls: 'pill pill--low' },
+  elevated: { label: 'Elevated', cls: 'pill pill--elevated' },
+  high: { label: 'High', cls: 'pill pill--high' },
 }
 
 /**
@@ -51,13 +51,13 @@ export function AnomalyCard({ series, stats }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <span className="text-sm font-medium text-[color:var(--ink-2)]">
           Anomaly likelihood
         </span>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.cls}`}>
+        <span className={badge.cls}>
           {badge.label}
         </span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="text-xs text-[color:var(--ink-3)]">
           latest vs {stats.baseline_n}-point baseline
         </span>
       </div>
@@ -66,10 +66,10 @@ export function AnomalyCard({ series, stats }: Props) {
         {cells.map((c) => (
           <div
             key={c.label}
-            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2"
+            className="card px-3 py-2"
           >
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{c.label}</p>
-            <p className="mt-0.5 mono text-base font-semibold text-gray-900 dark:text-gray-100">
+            <p className="text-xs font-medium text-[color:var(--ink-3)]">{c.label}</p>
+            <p className="mt-0.5 mono text-base font-semibold text-[color:var(--ink)]">
               {c.value}
             </p>
           </div>
@@ -82,9 +82,9 @@ export function AnomalyCard({ series, stats }: Props) {
           height={200}
           showLegend
           series={[
-            { key: 'upper', name: '+2σ', color: '#f97316', fillOpacity: 0 },
-            { key: 'lower', name: '−2σ', color: '#f97316', fillOpacity: 0 },
-            { key: 'value', name: formatMetric(stats.metric), color: '#6366f1', fillOpacity: 0.15 },
+            { key: 'upper', name: '+2σ', color: 'var(--caution)', fillOpacity: 0 },
+            { key: 'lower', name: '−2σ', color: 'var(--caution)', fillOpacity: 0 },
+            { key: 'value', name: formatMetric(stats.metric), color: 'var(--accent)', fillOpacity: 0.15 },
           ]}
         />
       )}

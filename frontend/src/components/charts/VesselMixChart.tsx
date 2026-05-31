@@ -17,11 +17,11 @@ interface Props {
 }
 
 const series = [
-  { key: 'container', name: 'Container', color: '#6366f1', fillOpacity: 0.5 },
-  { key: 'dry_bulk', name: 'Dry bulk', color: '#f97316', fillOpacity: 0.5 },
-  { key: 'tanker', name: 'Tanker', color: '#ef4444', fillOpacity: 0.5 },
-  { key: 'general_cargo', name: 'General cargo', color: '#22c55e', fillOpacity: 0.5 },
-  { key: 'roro', name: 'RoRo', color: '#a855f7', fillOpacity: 0.5 },
+  { key: 'container', name: 'Container', color: 'var(--accent)', fillOpacity: 0.5 },
+  { key: 'dry_bulk', name: 'Dry bulk', color: 'var(--caution)', fillOpacity: 0.5 },
+  { key: 'tanker', name: 'Tanker', color: 'var(--negative)', fillOpacity: 0.5 },
+  { key: 'general_cargo', name: 'General cargo', color: 'var(--positive)', fillOpacity: 0.5 },
+  { key: 'roro', name: 'RoRo', color: 'var(--highlight)', fillOpacity: 0.5 },
 ]
 
 export function VesselMixChart({ data }: Props) {

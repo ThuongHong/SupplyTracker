@@ -7,12 +7,12 @@ interface Props {
 }
 
 const indexSeries = [
-  { key: 'fbx', name: 'FBX (rebased)', color: '#f97316', fillOpacity: 0.15 },
-  { key: 'wci', name: 'WCI (rebased)', color: '#6366f1', fillOpacity: 0.15 },
+  { key: 'fbx', name: 'FBX (rebased)', color: 'var(--caution)', fillOpacity: 0.15 },
+  { key: 'wci', name: 'WCI (rebased)', color: 'var(--accent)', fillOpacity: 0.15 },
 ]
 
 const bunkerSeries = [
-  { key: 'value', name: 'Bunker price', color: '#64748b', fillOpacity: 0.2 },
+  { key: 'value', name: 'Bunker price', color: 'var(--ink-4)', fillOpacity: 0.2 },
 ]
 
 export function IndicesPanel({ indices, bunker }: Props) {
@@ -42,25 +42,25 @@ export function IndicesPanel({ indices, bunker }: Props) {
   }))
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="border border-[color:var(--rule-thin)] overflow-hidden">
       <div
         role="button"
         tabIndex={0}
         onClick={toggle}
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && toggle()}
-        className="flex items-center justify-between px-4 py-3 cursor-pointer bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 select-none"
+        className="flex items-center justify-between px-4 py-3 cursor-pointer bg-[color:var(--paper-2)] hover:bg-[color:var(--card-2)] select-none"
       >
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <span className="text-sm font-medium text-[color:var(--ink-2)]">
           Macro Indices
         </span>
-        <span className="text-gray-500 dark:text-gray-400 text-xs">{collapsed ? '▸' : '▾'}</span>
+        <span className="text-[color:var(--ink-3)] text-xs">{collapsed ? '▸' : '▾'}</span>
       </div>
 
       {!collapsed && (
-        <div className="p-4 space-y-4 bg-white dark:bg-gray-900">
+        <div className="p-4 space-y-4 bg-[color:var(--card)]">
           <AreaChart data={rebasedData} series={indexSeries} showLegend height={200} />
           <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Bunker price</p>
+            <p className="text-xs text-[color:var(--ink-3)] mb-1">Bunker price</p>
             <AreaChart data={bunkerData} series={bunkerSeries} height={80} showLegend={false} />
           </div>
         </div>

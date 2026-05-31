@@ -41,9 +41,9 @@ export function EntitySummary({ entityType, entityId, window, reloadKey }: Props
   const metrics = data.metrics && data.metrics.length > 0 ? data.metrics : [s]
 
   const sections = [
-    { label: 'What happened', body: data.what_happened, accent: 'text-indigo-600 dark:text-indigo-400' },
-    { label: 'So what', body: data.so_what, accent: 'text-amber-600 dark:text-amber-400' },
-    { label: 'To do', body: data.to_do, accent: 'text-emerald-600 dark:text-emerald-400' },
+    { label: 'What happened', body: data.what_happened, accent: 'text-[color:var(--accent)]' },
+    { label: 'So what', body: data.so_what, accent: 'text-[color:var(--caution)]' },
+    { label: 'To do', body: data.to_do, accent: 'text-[color:var(--positive)]' },
   ]
 
   return (
@@ -55,19 +55,19 @@ export function EntitySummary({ entityType, entityId, window, reloadKey }: Props
               <p className={`text-xs font-semibold uppercase tracking-wide ${sec.accent}`}>
                 {sec.label}
               </p>
-              <p className="mt-1 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+              <p className="mt-1 text-sm leading-relaxed text-[color:var(--ink-2)]">
                 {sec.body || '—'}
               </p>
             </div>
           ))}
         </div>
-        <p className="mt-4 mono text-xs text-gray-400">
+        <p className="mt-4 mono text-xs text-[color:var(--ink-4)]">
           headline metric: {formatMetric(s.metric)} (most anomalous) over {data.window}
         </p>
       </Card>
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="border border-[color:var(--rule-thin)] overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+          <thead className="bg-[color:var(--paper-2)] text-[color:var(--ink-3)]">
             <tr>
               <th className="text-left font-medium px-3 py-1.5">Metric</th>
               <th className="text-right font-medium px-3 py-1.5">Latest</th>
@@ -79,19 +79,19 @@ export function EntitySummary({ entityType, entityId, window, reloadKey }: Props
             {metrics.map((m) => (
               <tr
                 key={m.metric ?? Math.random()}
-                className="border-t border-gray-100 dark:border-gray-700"
+                className="border-t border-[color:var(--rule-hair)]"
               >
-                <td className="px-3 py-1.5 text-gray-900 dark:text-gray-100">
+                <td className="px-3 py-1.5 text-[color:var(--ink)]">
                   {formatMetric(m.metric)}
                 </td>
-                <td className="px-3 py-1.5 text-right mono text-gray-700 dark:text-gray-300">
+                <td className="px-3 py-1.5 text-right mono text-[color:var(--ink-2)]">
                   {m.latest != null ? m.latest.toFixed(1) : '—'}
                 </td>
-                <td className="px-3 py-1.5 text-right mono text-gray-700 dark:text-gray-300">
+                <td className="px-3 py-1.5 text-right mono text-[color:var(--ink-2)]">
                   {m.z_score != null ? m.z_score.toFixed(2) : '—'}
                 </td>
                 <td className="px-3 py-1.5 text-right">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${LEVEL_CLS[m.anomaly_level ?? 'low'] ?? LEVEL_CLS.low}`}>
+                  <span className={LEVEL_CLS[m.anomaly_level ?? 'low'] ?? LEVEL_CLS.low}>
                     {m.anomaly_level ?? '—'}
                   </span>
                 </td>
@@ -105,7 +105,7 @@ export function EntitySummary({ entityType, entityId, window, reloadKey }: Props
 }
 
 const LEVEL_CLS: Record<string, string> = {
-  low: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  elevated: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  high: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  low: 'pill pill--low',
+  elevated: 'pill pill--elevated',
+  high: 'pill pill--high',
 }
