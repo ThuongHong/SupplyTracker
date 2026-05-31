@@ -128,44 +128,133 @@
   .section__head h2 {
     font-family: var(--f-display);
     font-weight: 650;
+    color: var(--ink);
+    line-height: 1;
   }
+
+  .dtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--f-ui);
+    color: var(--ink);
   }
+
+  .dtable th {
+    padding: 0.78rem 0.88rem;
+    border-bottom: 1px solid var(--rule-thin);
+    color: var(--ink-3);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
+
+  .dtable td {
+    padding: 0.92rem 0.88rem;
+    border-bottom: 1px solid var(--rule-hair);
+    vertical-align: middle;
   }
+
+  .dtable tbody tr {
+    cursor: pointer;
   }
+
+  .dtable tbody tr:hover {
+    background: color-mix(in srgb, var(--accent-soft) 26%, transparent);
   }
+
+  .bar-cell {
+    position: relative;
+    display: block;
+    min-width: 104px;
+    height: 0.54rem;
+    overflow: hidden;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-hair);
   }
+
+  .bar-cell > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
   }
+
+  .anomaly {
+    border-left: 3px solid var(--negative);
+    background: color-mix(in srgb, var(--negative) 8%, transparent);
   }
+
+  .frame {
+    width: min(100%, 1280px);
+    margin: 0 auto;
+    padding: 28px 36px 80px;
   }
+
+  .tape {
+    background: var(--ink);
+    color: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    overflow: hidden;
   }
+
+  .tape-track {
+    display: inline-flex;
+    min-width: max-content;
+    animation: tape-scroll 38s linear infinite;
   }
+
+  .tape:hover .tape-track {
+    animation-play-state: paused;
   }
+
+  .masthead {
+    border-bottom: 3px double var(--rule);
+    color: var(--ink);
   }
+
+  .nav {
+    border-bottom: 1px solid var(--rule-thin);
+    color: var(--ink);
   }
+
+  .sidebar-width {
+    width: 240px;
   }
+
+  .sidebar-width-collapsed {
+    width: 64px;
   }
+
+  @media (max-width: 768px) {
+    .frame {
+      padding: 18px 16px 64px;
     }
+
+    .section__head {
+      align-items: start;
+      flex-direction: column;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tape-track {
+      animation: none;
     }
   }
 }
+
+@keyframes tape-scroll {
   from {
+    transform: translateX(0);
   }
+
+  to {
+    transform: translateX(-33.333%);
   }
 }
-}
-}
-}
-}
-}
-}
-}
-}
-}
-}
-[173 more lines]
+
 /* ── Editorial component classes (migration target) ───────────────────── */
 
 .focus-ring:focus-visible {
