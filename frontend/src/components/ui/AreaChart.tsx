@@ -39,7 +39,7 @@ interface AreaChartProps {
 }
 
 const DEFAULT_SERIES: AreaChartSeries[] = [
-  { key: 'value', name: 'Value', color: '#6366f1', fillOpacity: 0.15 },
+  { key: 'value', name: 'Value', color: 'var(--accent)', fillOpacity: 0.15 },
 ]
 
 export function AreaChart({
@@ -71,22 +71,19 @@ export function AreaChart({
 
           <CartesianGrid
             strokeDasharray="3 3"
-            stroke="currentColor"
-            className="text-gray-200 dark:text-gray-700"
+            stroke="var(--rule-hair)"
             strokeOpacity={0.6}
           />
 
           <XAxis
             dataKey={xKey}
-            tick={{ fontSize: 11, fill: 'currentColor' }}
-            className="text-gray-500 dark:text-gray-400"
+            tick={{ fontSize: 11, fill: 'var(--ink-3)' }}
             tickLine={false}
             axisLine={false}
           />
 
           <YAxis
-            tick={{ fontSize: 11, fill: 'currentColor' }}
-            className="text-gray-500 dark:text-gray-400"
+            tick={{ fontSize: 11, fill: 'var(--ink-3)' }}
             tickLine={false}
             axisLine={false}
             width={48}
@@ -95,10 +92,9 @@ export function AreaChart({
 
           <Tooltip
             contentStyle={{
-              borderRadius: '0.5rem',
-              border: '1px solid',
-              borderColor: 'rgb(229 231 235)',
-              backgroundColor: 'rgb(255 255 255)',
+              border: '1px solid var(--rule-thin)',
+              backgroundColor: 'var(--card)',
+              color: 'var(--ink)',
               fontSize: 12,
             }}
             formatter={tooltipFormatter}

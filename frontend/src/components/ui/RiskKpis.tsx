@@ -19,8 +19,8 @@ export function KpiCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
-      <p className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+    <div className="card px-4 py-3">
+      <p className="flex items-center gap-1 text-xs font-medium text-[color:var(--ink-3)]">
         {label}
         {info}
       </p>
@@ -32,7 +32,7 @@ export function KpiCard({
 function RiskTrendInfo() {
   return (
     <InfoTooltip label="How the risk trend is computed">
-      <span className="block font-semibold text-gray-700 dark:text-gray-200">
+      <span className="block font-semibold text-[color:var(--ink-2)]">
         Risk trend
       </span>
       <span className="mt-1 block">
@@ -79,7 +79,7 @@ export function TrendKpi({ riskSeries }: { riskSeries: number[] }) {
 export function SimpleKpi({ label, value }: { label: string; value: string }) {
   return (
     <KpiCard label={label}>
-      <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{value}</span>
+      <span className="text-xl font-bold text-[color:var(--ink)]">{value}</span>
     </KpiCard>
   )
 }

@@ -26,15 +26,15 @@ export function computeRiskTrend(
 export function severityTextClass(sev: Severity): string {
   switch (sev) {
     case 'low':
-      return 'text-emerald-600 dark:text-emerald-400'
+      return 'text-[color:var(--positive)]'
     case 'elevated':
-      return 'text-amber-600 dark:text-amber-400'
+      return 'text-[color:var(--caution)]'
     case 'high':
-      return 'text-orange-600 dark:text-orange-400'
+      return 'text-[color:var(--negative)]'
     case 'critical':
-      return 'text-red-600 dark:text-red-400'
+      return 'text-[color:var(--negative)]'
     default:
-      return 'text-gray-500 dark:text-gray-400'
+      return 'text-[color:var(--ink-3)]'
   }
 }
 
@@ -42,12 +42,12 @@ export function severityTextClass(sev: Severity): string {
 export function trendDisplay(dir: TrendDir): { arrow: string; cls: string } {
   switch (dir) {
     case 'rising':
-      return { arrow: '↑', cls: 'text-red-600 dark:text-red-400' }
+      return { arrow: '↑', cls: 'text-[color:var(--negative)]' }
     case 'falling':
-      return { arrow: '↓', cls: 'text-emerald-600 dark:text-emerald-400' }
+      return { arrow: '↓', cls: 'text-[color:var(--positive)]' }
     case 'flat':
-      return { arrow: '→', cls: 'text-gray-500 dark:text-gray-400' }
+      return { arrow: '→', cls: 'text-[color:var(--ink-3)]' }
     default:
-      return { arrow: '—', cls: 'text-gray-400 dark:text-gray-500' }
+      return { arrow: '—', cls: 'text-[color:var(--ink-4)]' }
   }
 }

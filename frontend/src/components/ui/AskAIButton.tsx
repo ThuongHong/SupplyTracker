@@ -17,7 +17,7 @@ export function AskAIButton({ entity, chart, window, onAsk }: Props) {
     <button
       onClick={handleClick}
       title={`Ask AI about ${chart}`}
-      className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded"
+      className="text-xs text-[color:var(--accent)] hover:underline focus-ring"
     >
       Ask AI
     </button>

@@ -39,9 +39,9 @@ export function InsightRow({ insight, onClick }: InsightRowProps) {
       }}
       className={[
         'flex items-start gap-3 px-4 py-3',
-        'border-b border-gray-100 dark:border-gray-700 last:border-0',
+        'border-b border-[color:var(--rule-hair)] last:border-0',
         onClick
-          ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:outline-none focus:bg-gray-50 dark:focus:bg-gray-700/50'
+          ? 'cursor-pointer hover:bg-[color:var(--paper-2)] focus:outline-none focus:bg-[color:var(--paper-2)]'
           : '',
         'transition-colors duration-100',
       ].join(' ')}
@@ -58,23 +58,23 @@ export function InsightRow({ insight, onClick }: InsightRowProps) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+          <span className="text-sm font-medium text-[color:var(--ink)] truncate">
             {insight.title}
           </span>
           <Badge variant={severity}>{insight.attention_level}</Badge>
           {insight.entity_name && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="text-xs text-[color:var(--ink-3)]">
               {insight.entity_name}
             </span>
           )}
         </div>
         {insight.narrative && (
-          <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+          <p className="mt-0.5 text-sm text-[color:var(--ink-2)] line-clamp-2">
             {insight.narrative}
           </p>
         )}
         {insight.timestamp && (
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+          <p className="mt-1 text-xs text-[color:var(--ink-4)]">
             {insight.timestamp}
           </p>
         )}

@@ -10,12 +10,12 @@ interface StatusDotProps {
 }
 
 const colorClasses: Record<Severity, string> = {
-  low: 'bg-green-500 dark:bg-green-400',
-  elevated: 'bg-amber-500 dark:bg-amber-400',
-  moderate: 'bg-amber-500 dark:bg-amber-400',
-  high: 'bg-orange-500 dark:bg-orange-400',
-  critical: 'bg-red-500 dark:bg-red-400',
-  unknown: 'bg-gray-400 dark:bg-gray-500',
+  low: 'bg-[color:var(--positive)]',
+  elevated: 'bg-[color:var(--caution)]',
+  moderate: 'bg-[color:var(--caution)]',
+  high: 'bg-[color:var(--negative)]',
+  critical: 'bg-[color:var(--negative)]',
+  unknown: 'bg-[color:var(--ink-4)]',
 }
 
 const sizeClasses: Record<NonNullable<StatusDotProps['size']>, string> = {

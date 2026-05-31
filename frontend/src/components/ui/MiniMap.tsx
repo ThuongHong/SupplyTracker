@@ -57,7 +57,7 @@ export function MiniMap({
     mapRef.current = map
 
     if (showMarker) {
-      markerRef.current = new maplibregl.Marker({ color: '#6366f1' })
+      markerRef.current = new maplibregl.Marker({ color: 'var(--accent)' })
         .setLngLat(center)
         .addTo(map)
     }
@@ -80,7 +80,7 @@ export function MiniMap({
   return (
     <div
       ref={containerRef}
-      className={['rounded-lg overflow-hidden', className].join(' ')}
+      className={['overflow-hidden border border-[color:var(--rule-thin)]', className].join(' ')}
       style={{
         width: typeof width === 'number' ? `${width}px` : width,
         height: typeof height === 'number' ? `${height}px` : height,

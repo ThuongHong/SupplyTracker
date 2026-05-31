@@ -15,13 +15,13 @@ export function InfoTooltip({ label = 'More information', children }: InfoToolti
       <button
         type="button"
         aria-label={label}
-        className="rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="rounded-full text-[color:var(--ink-4)] hover:text-[color:var(--ink-2)] focus-ring"
       >
         <IconInfo className="w-3.5 h-3.5" />
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-xs font-normal leading-relaxed text-gray-600 dark:text-gray-300 shadow-lg group-hover:block group-focus-within:block"
+        className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-64 border border-[color:var(--rule-thin)] bg-[color:var(--card)] p-3 text-xs font-normal leading-relaxed text-[color:var(--ink-2)] group-hover:block group-focus-within:block"
       >
         {children}
       </span>
