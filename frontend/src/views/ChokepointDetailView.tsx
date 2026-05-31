@@ -24,6 +24,28 @@ interface ChokepointDetailViewProps {
   id: string
 }
 
+function DetailSection({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="section__head">
+        <div>
+          <p className="label-cap">{eyebrow}</p>
+          <h2 className="serif text-2xl">{title}</h2>
+        </div>
+      </div>
+      {children}
+    </section>
+  )
+}
+
 // ─── KPI Strip ───────────────────────────────────────────────────────────────
 
 function KpiStrip({
@@ -177,18 +199,18 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/chokepoints')}
-            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="p-1.5 text-[color:var(--ink-3)] hover:text-[color:var(--ink)] focus-ring"
             aria-label="Back to Chokepoints"
           >
             <IconChevronLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          <h1 className="serif text-3xl text-[color:var(--ink)]">
             Chokepoint Detail
           </h1>
         </div>
-        <Card>
+        <div className="card p-4">
           <DataState status="loading" />
-        </Card>
+        </div>
       </div>
     )
   }
@@ -199,22 +221,22 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/chokepoints')}
-            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="p-1.5 text-[color:var(--ink-3)] hover:text-[color:var(--ink)] focus-ring"
             aria-label="Back to Chokepoints"
           >
             <IconChevronLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          <h1 className="serif text-3xl text-[color:var(--ink)]">
             Chokepoint Detail
           </h1>
         </div>
-        <Card>
+        <div className="card p-4">
           <DataState
             status="error"
             error={error ?? 'Chokepoint not found'}
             onRetry={() => globalThis.location.reload()}
           />
-        </Card>
+        </div>
       </div>
     )
   }
@@ -225,17 +247,17 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={() => navigate('/chokepoints')}
-          className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+          className="p-1.5 text-[color:var(--ink-3)] hover:text-[color:var(--ink)] focus-ring"
           aria-label="Back to Chokepoints"
         >
           <IconChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{cp.name}</h1>
+            <h1 className="serif text-3xl text-[color:var(--ink)]">{cp.name}</h1>
             <SeverityBadge severity={cp.severity} />
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-[color:var(--ink-3)] mt-0.5">
             {cp.updated_at ? `Updated ${cp.updated_at.slice(0, 10)}` : ''}
           </p>
         </div>
@@ -245,7 +267,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
             <button
               onClick={handleSync}
               disabled={syncing || untracking}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-[color:var(--rule-thin)] text-sm font-medium transition-colors hover:bg-[color:var(--paper-2)] focus-ring disabled:opacity-60 disabled:cursor-not-allowed"
               aria-label={isTracked ? 'Re-sync chokepoint data' : 'Sync chokepoint data'}
             >
               {syncing ? (
@@ -255,7 +277,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
                 </>
               ) : (
                 <>
-                  <IconRefresh className="w-4 h-4 text-gray-400" />
+                  <IconRefresh className="w-4 h-4 text-[color:var(--ink-4)]" />
                   {isTracked ? 'Re-sync' : 'Sync data'}
                 </>
               )}
@@ -264,7 +286,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
               <button
                 onClick={handleUntrack}
                 disabled={syncing || untracking}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-[color:var(--rule-thin)] text-sm font-medium transition-colors hover:bg-[color:var(--paper-2)] focus-ring disabled:opacity-60 disabled:cursor-not-allowed"
                 aria-label="Untrack chokepoint"
                 title="Untrack"
               >
@@ -275,7 +297,7 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
                   </>
                 ) : (
                   <>
-                    <IconStarFilled className="w-4 h-4 text-amber-500" />
+                    <IconStarFilled className="w-4 h-4 text-[color:var(--caution)]" />
                     Untrack
                   </>
                 )}
@@ -296,9 +318,9 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
       />
 
       {tab === 'events' && (
-        <Card title="Related News">
+        <DetailSection eyebrow="News" title="Related News">
           <EventLog entityType="chokepoint" entityId={id} />
-        </Card>
+        </DetailSection>
       )}
 
       {tab === 'overview' && <>
@@ -315,18 +337,18 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
 
       {/* Map */}
       {cp.lon != null && cp.lat != null && (
-        <Card title="Location">
+        <Card title="Location" inside>
           <MiniMap center={[cp.lon, cp.lat]} zoom={5} height={240} showMarker />
         </Card>
       )}
 
       {/* 50-day breakdown chart — kept as-is (uses separate breakdown endpoint) */}
-      <Card title="Transit Activity — 50-day strip">
+      <DetailSection eyebrow="Drill-down" title="Transit Activity — 50-day strip">
         <BreakdownChart id={id} onLatestDay={setLatestDay} />
-      </Card>
+      </DetailSection>
 
       {/* Throughput anomaly (z-score hypothesis) */}
-      <Card title="Throughput anomaly (z-score)">
+      <DetailSection eyebrow="Anomaly" title="Throughput anomaly (z-score)">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
@@ -335,44 +357,44 @@ export default function ChokepointDetailView({ id }: ChokepointDetailViewProps) 
             stats={dashboard?.stats.anomaly}
           />
         )}
-      </Card>
+      </DetailSection>
 
       {/* Macro sensitivity — lead-lag of transit volume vs macro indices */}
-      <Card title="Macro sensitivity">
+      <DetailSection eyebrow="Sensitivity" title="Macro sensitivity">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
           <MacroSensitivity items={dashboard?.macro_sensitivity} />
         )}
-      </Card>
+      </DetailSection>
 
       {/* Transit mix by vessel type (PortWatch) */}
-      <Card title="Transit Mix — by vessel type">
+      <DetailSection eyebrow="Fleet" title="Transit Mix — by vessel type">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
           <VesselMixChart data={dashboard?.charts.vessel_mix ?? []} />
         )}
-      </Card>
+      </DetailSection>
 
       {/* LLM Narrative */}
       {cp.description && (
-        <Card title="Narrative">
-          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        <DetailSection eyebrow="Desk note" title="Narrative">
+          <p className="text-sm text-[color:var(--ink-2)] leading-relaxed">
             {cp.description}
           </p>
-        </Card>
+        </DetailSection>
       )}
 
       {/* Insights */}
       {cp.insights && cp.insights.length > 0 && (
-        <Card title="Insights">
+        <DetailSection eyebrow="Signals" title="Insights">
           <div>
             {cp.insights.map((item) => (
               <InsightRow key={item.id} insight={item} />
             ))}
           </div>
-        </Card>
+        </DetailSection>
       )}
 
       </>}

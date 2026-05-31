@@ -42,6 +42,28 @@ function KpiStrip({ port, riskSeries }: { port: PortDetail; riskSeries: number[]
 
 const WINDOW_DAYS: Record<'7d' | '30d' | '90d', number> = { '7d': 7, '30d': 30, '90d': 90 }
 
+function DetailSection({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="section__head">
+        <div>
+          <p className="label-cap">{eyebrow}</p>
+          <h2 className="serif text-2xl">{title}</h2>
+        </div>
+      </div>
+      {children}
+    </section>
+  )
+}
+
 function MetricDrilldown({ portId, window }: { portId: number; window: '7d' | '30d' | '90d' }) {
   const [allMetrics, setAllMetrics] = useState<Record<string, MetricPoint[]>>({})
   const [loading, setLoading] = useState(true)
@@ -84,7 +106,7 @@ function MetricDrilldown({ portId, window }: { portId: number; window: '7d' | '3
       <div className="flex items-center gap-3 flex-wrap">
         <label
           htmlFor="metric-picker"
-          className="text-sm font-medium text-gray-700 dark:text-gray-300"
+          className="text-sm font-medium text-[color:var(--ink-2)]"
         >
           Metric
         </label>
@@ -92,14 +114,14 @@ function MetricDrilldown({ portId, window }: { portId: number; window: '7d' | '3
           id="metric-picker"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
-          className="text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="ui text-sm border border-[color:var(--rule-thin)] bg-[color:var(--card)] text-[color:var(--ink-2)] px-3 py-1.5 focus-ring"
         >
           {keys.map((k) => (
             <option key={k} value={k}>{formatMetric(k)}</option>
           ))}
         </select>
         {currentVal !== null && (
-          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <span className="text-sm font-semibold text-[color:var(--ink)]">
             Latest: {currentVal.toFixed(2)}
           </span>
         )}
@@ -193,16 +215,16 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/ports')}
-            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+            className="p-1.5 text-[color:var(--ink-3)] hover:text-[color:var(--ink)] focus-ring"
             aria-label="Back to Ports"
           >
             <IconChevronLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Port Detail</h1>
+          <h1 className="serif text-3xl text-[color:var(--ink)]">Port Detail</h1>
         </div>
-        <Card>
+        <div className="card p-4">
           <DataState status="loading" />
-        </Card>
+        </div>
       </div>
     )
   }
@@ -213,16 +235,16 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/ports')}
-            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="p-1.5 text-[color:var(--ink-3)] hover:text-[color:var(--ink)] focus-ring"
             aria-label="Back to Ports"
           >
             <IconChevronLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Port Detail</h1>
+          <h1 className="serif text-3xl text-[color:var(--ink)]">Port Detail</h1>
         </div>
-        <Card>
+        <div className="card p-4">
           <DataState status="error" error={error ?? 'Port not found'} onRetry={() => globalThis.location.reload()} />
-        </Card>
+        </div>
       </div>
     )
   }
@@ -233,20 +255,20 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={() => navigate('/ports')}
-          className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+          className="p-1.5 text-[color:var(--ink-3)] hover:text-[color:var(--ink)] focus-ring"
           aria-label="Back to Ports"
         >
           <IconChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{port.name}</h1>
+            <h1 className="serif text-3xl text-[color:var(--ink)]">{port.name}</h1>
             <SeverityBadge severity={port.severity} />
             {port.unlocode && (
               <Badge variant="info">{port.unlocode}</Badge>
             )}
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-[color:var(--ink-3)] mt-0.5">
             {port.country}
             {port.region ? ` · ${port.region}` : ''}
             {port.updated_at ? ` · Updated ${port.updated_at.slice(0, 10)}` : ''}
@@ -258,7 +280,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
             <button
               onClick={handleSync}
               disabled={syncing || untracking}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-[color:var(--rule-thin)] text-sm font-medium transition-colors hover:bg-[color:var(--paper-2)] focus-ring disabled:opacity-60 disabled:cursor-not-allowed"
               aria-label={isTracked ? 'Re-sync port data' : 'Sync port data'}
             >
               {syncing ? (
@@ -268,7 +290,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
                 </>
               ) : (
                 <>
-                  <IconRefresh className="w-4 h-4 text-gray-400" />
+                  <IconRefresh className="w-4 h-4 text-[color:var(--ink-4)]" />
                   {isTracked ? 'Re-sync' : 'Sync data'}
                 </>
               )}
@@ -277,7 +299,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
               <button
                 onClick={handleUntrack}
                 disabled={syncing || untracking}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-[color:var(--rule-thin)] text-sm font-medium transition-colors hover:bg-[color:var(--paper-2)] focus-ring disabled:opacity-60 disabled:cursor-not-allowed"
                 aria-label="Untrack port"
                 title="Untrack"
               >
@@ -288,7 +310,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
                   </>
                 ) : (
                   <>
-                    <IconStarFilled className="w-4 h-4 text-amber-500" />
+                    <IconStarFilled className="w-4 h-4 text-[color:var(--caution)]" />
                     Untrack
                   </>
                 )}
@@ -309,9 +331,9 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       />
 
       {tab === 'events' && (
-        <Card title="Related News">
+        <DetailSection eyebrow="News" title="Related News">
           <EventLog entityType="port" entityId={id} />
-        </Card>
+        </DetailSection>
       )}
 
       {tab === 'overview' && <>
@@ -327,7 +349,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
 
       {/* Map */}
       {port.lon != null && port.lat != null && (
-        <Card title="Location">
+        <Card title="Location" inside>
           <MiniMap
             center={[port.lon, port.lat]}
             zoom={6}
@@ -338,46 +360,46 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
       )}
 
       {/* Metric drill-down — each metric with its own z-score anomaly plot */}
-      <Card title="Metric Breakdown — z-score anomaly">
+      <DetailSection eyebrow="Drill-down" title="Metric Breakdown — z-score anomaly">
         <MetricDrilldown portId={port.id} window={window} />
-      </Card>
+      </DetailSection>
 
       {/* Macro sensitivity — lead-lag of this port's trade vs macro indices */}
-      <Card title="Macro sensitivity">
+      <DetailSection eyebrow="Sensitivity" title="Macro sensitivity">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
           <MacroSensitivity items={dashboard?.macro_sensitivity} />
         )}
-      </Card>
+      </DetailSection>
 
       {/* Vessel mix by cargo type (PortWatch port calls) */}
-      <Card title="Vessel Mix — port calls by cargo type">
+      <DetailSection eyebrow="Fleet" title="Vessel Mix — port calls by cargo type">
         {dashLoading ? (
           <DataState status="loading" />
         ) : (
           <VesselMixChart data={dashboard?.charts.vessel_mix ?? []} />
         )}
-      </Card>
+      </DetailSection>
 
       {/* LLM Narrative */}
       {port.description && (
-        <Card title="Narrative">
-          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        <DetailSection eyebrow="Desk note" title="Narrative">
+          <p className="text-sm text-[color:var(--ink-2)] leading-relaxed">
             {port.description}
           </p>
-        </Card>
+        </DetailSection>
       )}
 
       {/* Insights */}
       {port.insights && port.insights.length > 0 && (
-        <Card title="Insights">
+        <DetailSection eyebrow="Signals" title="Insights">
           <div>
             {port.insights.map((item) => (
               <InsightRow key={item.id} insight={item} />
             ))}
           </div>
-        </Card>
+        </DetailSection>
       )}
 
       </>}
