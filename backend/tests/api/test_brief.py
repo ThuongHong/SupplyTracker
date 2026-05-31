@@ -1,0 +1,75 @@
+"""Contract tests for GET /api/v1/brief."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.api.deps import get_redis
+from app.db.session import get_db
+from app.main import app
+
+
+@pytest.fixture()
+def mock_session():
+    return MagicMock()
+
+
+@pytest.fixture()
+def mock_redis():
+    return MagicMock()
+
+
+@pytest.fixture()
+def client(mock_session, mock_redis):
+    def override_get_db():
+        yield mock_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_redis] = lambda: mock_redis
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def _story_event() -> MagicMock:
+    event = MagicMock()
+    event.event_key = "evt-1"
+    event.severity = "critical"
+    event.entity_name = "Suez Canal"
+    event.entity_type = "chokepoint"
+    event.event_type = "transit_disruption"
+    event.narrative = "Transit halted"
+    event.event_time = datetime(2026, 5, 30, 9, 0, tzinfo=timezone.utc)
+    return event
+
+
+def _insight() -> MagicMock:
+    insight = MagicMock()
+    insight.attention_level = "high"
+    insight.title = "LA congestion"
+    insight.narrative = "Dwell rising"
+    return insight
+
+
+class TestBrief:
+    def test_returns_brief_markdown(self, mock_session, client, monkeypatch):
+        story_query = MagicMock()
+        story_query.order_by.return_value.limit.return_value.all.return_value = [_story_event()]
+        insight_query = MagicMock()
+        insight_query.order_by.return_value.limit.return_value.all.return_value = [_insight()]
+        mock_session.query.side_effect = [story_query, insight_query]
+
+        monkeypatch.setattr(
+            "app.api.routes.brief.get_decision_brief",
+            lambda session, redis_client, top_events, top_insights: "## Situation\nAll clear.",
+        )
+
+        resp = client.get("/api/v1/brief")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["brief"] == "## Situation\nAll clear."
+        assert body["as_of"]
