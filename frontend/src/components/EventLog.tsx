@@ -77,20 +77,20 @@ export function EventLog({ entityType, entityId }: EventLogProps) {
       {news.map((item) => (
         <div
           key={item.id}
-          className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700"
+          className="card--inside p-3"
         >
           <a
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline line-clamp-2"
+            className="text-sm font-medium text-[color:var(--accent)] hover:underline line-clamp-2"
           >
             {item.title}
           </a>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-gray-500 dark:text-gray-400">{item.source}</span>
-            <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-            <span className="text-xs text-gray-400 dark:text-gray-500">
+            <span className="text-xs text-[color:var(--ink-3)]">{item.source}</span>
+            <span className="text-xs text-[color:var(--rule-thin)]">·</span>
+            <span className="text-xs text-[color:var(--ink-4)]">
               {relativeTime(item.published_at)}
             </span>
           </div>

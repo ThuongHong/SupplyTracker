@@ -24,9 +24,9 @@ interface Props {
 }
 
 /**
- * Growth & Market Insights, folded into the Overview page. The AI narrative
- * doubles as the morning brief; trade-growth KPIs, the import/export trend, and
- * the freight/bunker panel sit beneath it.
+ * Growth & Market Insights, folded into the Overview page. Shows the market-desk
+ * AI summary, trade-growth KPIs, the import/export trend, and the freight/bunker
+ * panel. (The page's Morning Brief hero is a separate, dedicated decision brief.)
  */
 export function MarketBrief({ window }: Props) {
   const [data, setData] = useState<MarketInsights | null>(() => getCachedMarket(window))
@@ -98,7 +98,7 @@ export function MarketBrief({ window }: Props) {
           return (
             <div
               key={key}
-              className="rounded-lg border border-[color:var(--rule-thin)] bg-[color:var(--card)] px-4 py-3"
+              className="card px-4 py-3"
             >
               <p className="text-xs font-medium text-[color:var(--ink-4)]">{label}</p>
               <p className="mt-1 text-2xl font-bold text-[color:var(--ink)]">{fmt(m?.latest)}</p>
@@ -123,8 +123,8 @@ export function MarketBrief({ window }: Props) {
             height={220}
             showLegend
             series={[
-              { key: 'import', name: 'Import', color: '#6366f1', fillOpacity: 0.15 },
-              { key: 'export', name: 'Export', color: '#22c55e', fillOpacity: 0.15 },
+              { key: 'import', name: 'Import', color: 'var(--accent)', fillOpacity: 0.15 },
+              { key: 'export', name: 'Export', color: 'var(--positive)', fillOpacity: 0.15 },
             ]}
           />
         )}

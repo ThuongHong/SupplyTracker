@@ -169,7 +169,7 @@ export default function ChatbotWidget() {
       {/* Floating button */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
+        className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-[color:var(--accent)] text-white focus-ring transition-colors"
         aria-label={open ? 'Close chat assistant' : 'Open chat assistant'}
       >
         {open ? (
@@ -195,20 +195,20 @@ export default function ChatbotWidget() {
       {/* Chat panel */}
       {open && (
         <div
-          className="fixed bottom-24 right-6 z-40 flex flex-col w-80 sm:w-96 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden"
+          className="card fixed bottom-24 right-6 z-40 flex flex-col w-80 sm:w-96 overflow-hidden"
           style={{ maxHeight: 'calc(100vh - 120px)' }}
           role="dialog"
           aria-label="Chat assistant"
         >
           {/* Panel header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-indigo-600 text-white">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--rule-thin)] bg-[color:var(--accent)] text-white">
             <div>
               <h2 className="text-sm font-semibold">Supply Assistant</h2>
-              <p className="text-xs text-indigo-200">Ask about ports, chokepoints, or risk</p>
+              <p className="text-xs text-white/80">Ask about ports, chokepoints, or risk</p>
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="p-1 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-white"
+              className="p-1 hover:bg-[color:color-mix(in_srgb,var(--paper)_20%,transparent)] focus-ring"
               aria-label="Close chat"
             >
               <IconX className="w-4 h-4" />
@@ -218,7 +218,7 @@ export default function ChatbotWidget() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
             {messages.length === 0 && (
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
+              <p className="text-sm text-[color:var(--ink-4)] text-center py-8">
                 Ask me about supply chain risks, ports, or disruptions.
               </p>
             )}
@@ -228,8 +228,8 @@ export default function ChatbotWidget() {
                 className={[
                   'max-w-[85%] px-3 py-2 rounded-xl text-sm',
                   msg.role === 'user'
-                    ? 'ml-auto bg-indigo-600 text-white rounded-br-sm'
-                    : 'mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-bl-sm',
+                    ? 'ml-auto bg-[color:var(--accent)] text-white rounded-br-sm'
+                    : 'mr-auto bg-[color:var(--paper-2)] text-[color:var(--ink)] rounded-bl-sm',
                 ].join(' ')}
               >
                 {msg.content ? (
@@ -244,13 +244,13 @@ export default function ChatbotWidget() {
               </div>
             ))}
             {error && (
-              <p className="text-xs text-red-600 dark:text-red-400 text-center">{error}</p>
+              <p className="text-xs text-[color:var(--negative)] text-center">{error}</p>
             )}
             <div ref={bottomRef} />
           </div>
 
           {/* Input */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-3">
+          <div className="border-t border-[color:var(--rule-thin)] p-3">
             <div className="flex gap-2">
               <textarea
                 ref={textareaRef}
@@ -259,18 +259,18 @@ export default function ChatbotWidget() {
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message… (Enter to send)"
                 rows={2}
-                className="flex-1 resize-none text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 resize-none text-sm border border-[color:var(--rule-thin)] bg-[color:var(--paper)] text-[color:var(--ink)] placeholder:text-[color:var(--ink-4)] px-3 py-2 focus-ring"
                 disabled={streaming}
               />
               <button
                 onClick={handleSend}
                 disabled={streaming || !input.trim()}
-                className="self-end px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+                className="self-end px-3 py-2 bg-[color:var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium focus-ring transition-colors"
               >
                 Send
               </button>
             </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+            <p className="text-xs text-[color:var(--ink-4)] mt-1.5">
               Shift+Enter for newline
             </p>
           </div>

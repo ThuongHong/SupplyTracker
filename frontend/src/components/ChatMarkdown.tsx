@@ -20,7 +20,7 @@ export function ChatMarkdown({ content }: { content: string }) {
           ol: ({ children }) => (
             <ol className="list-decimal pl-5 space-y-0.5">{children}</ol>
           ),
-          li: ({ children }) => <li className="marker:text-gray-400">{children}</li>,
+          li: ({ children }) => <li className="marker:text-[color:var(--ink-4)]">{children}</li>,
           strong: ({ children }) => (
             <strong className="font-semibold">{children}</strong>
           ),
@@ -29,7 +29,7 @@ export function ChatMarkdown({ content }: { content: string }) {
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-indigo-600 dark:text-indigo-400 underline"
+              className="text-[color:var(--accent)] underline"
             >
               {children}
             </a>
@@ -37,7 +37,7 @@ export function ChatMarkdown({ content }: { content: string }) {
           code: ({ className, children }) => {
             const inline = !className
             return inline ? (
-              <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[0.85em]">
+              <code className="px-1 py-0.5 bg-[color:var(--paper-2)] font-mono text-[0.85em]">
                 {children}
               </code>
             ) : (
@@ -47,7 +47,7 @@ export function ChatMarkdown({ content }: { content: string }) {
             )
           },
           pre: ({ children }) => (
-            <pre className="overflow-x-auto rounded-lg bg-black/10 dark:bg-white/10 p-2 text-[0.85em]">
+            <pre className="overflow-x-auto bg-[color:var(--paper-2)] p-2 text-[0.85em]">
               {children}
             </pre>
           ),
@@ -58,12 +58,12 @@ export function ChatMarkdown({ content }: { content: string }) {
             <table className="w-full text-xs border-collapse">{children}</table>
           ),
           th: ({ children }) => (
-            <th className="border border-gray-300 dark:border-gray-600 px-1.5 py-0.5 text-left">
+            <th className="border border-[color:var(--rule-thin)] px-1.5 py-0.5 text-left">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-0.5">
+            <td className="border border-[color:var(--rule-thin)] px-1.5 py-0.5">
               {children}
             </td>
           ),
