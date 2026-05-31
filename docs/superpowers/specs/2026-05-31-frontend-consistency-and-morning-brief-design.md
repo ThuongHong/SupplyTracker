@@ -32,6 +32,29 @@ Meanwhile:
   `data.narrative` from `GET /market/insights`). It is a *market* summary, not the
   full decision brief, and it is buried below the fake hero.
 
+### 1b. The "Last 24h alerts" rail is broken + redundant
+
+`OverviewView.tsx :: AlertsRail` (lines ~307–357) reads fields that **do not
+exist** on `InsightItem` (confirmed against `frontend/src/api/types.ts` and
+`backend/app/schemas/insights.py`):
+
+- `item.entity_name ?? item.entity_type ?? 'Signal'` — neither field exists on
+  an insight (real entity is in `affected_entities[]`), so the eyebrow always
+  renders the literal **"Signal"**.
+- `item.timestamp ? … : 'Live'` — there is no `timestamp` field (it is
+  `generated_at`), so the byline always renders **"Live"**.
+
+The card body (title + narrative) does render, but eyebrow + timestamp are dead
+placeholders. The rail is also **redundant** — the same critical/high insights
+already drive the hero headline (`buildHeadline`) and the evidence rail's "Open
+anomalies" count — and it carries a **hardcoded** "Story" aside ("Watch the
+narrow lanes first."), the same anti-pattern as the fake hero.
+
+A real event feed exists and is unused on the front page: `GET /story` returns
+`RiskStoryEvent` rows with genuine `entity_name`, `event_time`, `severity`,
+`event_type`, and `narrative` (verified: 16 seeded events, e.g. a critical
+"Suez Canal" transit disruption). There is **no frontend story client** yet.
+
 ### 2. Inconsistent design language
 
 Two clashing visual systems coexist:
@@ -81,6 +104,7 @@ Fixing the shared layer once propagates to both detail pages **and** Overview.
 | Hero loading | **Skeleton-then-swap** — masthead + skeleton dek paint immediately, real brief swaps in when resolved |
 | Brief failure | **Templated fallback** built from live metrics (top risks + index moves); never the old hardcoded lorem |
 | Brief format | **Markdown**, rendered rich with existing `react-markdown` + `remark-gfm` |
+| Alerts rail | **Replace with a real `/story` feed** — drop the buggy insight-based rail + hardcoded "Story" aside; render genuine 24h `RiskStoryEvent`s, editorially styled |
 
 ## Design
 
@@ -182,6 +206,24 @@ In `PortDetailView.tsx` and `ChokepointDetailView.tsx`:
    brief). Update its doc comment so it no longer claims to be "the morning
    brief".
 
+### E. Alerts rail → real `/story` feed
+
+Replace `AlertsRail` (and its hardcoded "Story" aside) on `OverviewView`:
+
+1. `frontend/src/api/story.ts` — `fetchStory()` hitting `GET /story`, plus a
+   `StoryEvent` type in `types.ts` mirroring the backend `StoryEventItem`
+   (`event_key`, `event_time`, `entity_type`, `entity_id`, `entity_name`,
+   `event_type`, `severity`, `narrative`, `attention_level`, …).
+2. New editorial rail component rendering the real events: `.label-cap` eyebrow
+   = `entity_name` (real, no longer "Signal"), serif title = `event_type` /
+   narrative summary, `.pill` severity badge, `.mono` timestamp from
+   `event_time` (no longer "Live"), `StatusDot` by severity. Sort by
+   `event_time` desc; cap ~5.
+3. Empty state via `DataState status="empty"` when `/story` is empty.
+4. Delete `AlertsRail`, the hardcoded "Story" aside, and the unused
+   insight-feeds-the-rail wiring. The hero headline/evidence rail still consume
+   `insights`; `/story` powers the new rail.
+
 ## Risks / tradeoffs
 
 - **LLM latency / cost** on cold cache — mitigated by redis cache (1h TTL),
@@ -203,6 +245,8 @@ In `PortDetailView.tsx` and `ChokepointDetailView.tsx`:
   templated fallback (not lorem) appears.
 - `GET /api/v1/brief` returns markdown; second call within the hour is a cache
   hit.
+- New alerts rail shows real `/story` events with actual entity names + event
+  times (no "Signal"/"Live" placeholders); empty `/story` shows the empty state.
 
 ## Out of scope / follow-ups
 
