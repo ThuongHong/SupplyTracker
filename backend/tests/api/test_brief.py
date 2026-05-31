@@ -55,6 +55,20 @@ def _insight() -> MagicMock:
 
 
 class TestBrief:
+    def test_get_redis_passes_string_url(self, monkeypatch):
+        calls: list[tuple[object, bool]] = []
+
+        def fake_from_url(url, *, decode_responses):
+            calls.append((url, decode_responses))
+            return MagicMock()
+
+        monkeypatch.setattr("app.api.deps.redis_lib.Redis.from_url", fake_from_url)
+
+        get_redis()
+
+        assert isinstance(calls[0][0], str)
+        assert calls[0][1] is True
+
     def test_returns_brief_markdown(self, mock_session, client, monkeypatch):
         story_query = MagicMock()
         story_query.order_by.return_value.limit.return_value.all.return_value = [_story_event()]

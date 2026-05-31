@@ -61,7 +61,7 @@ def get_redis() -> redis_lib.Redis:
     cheap to construct per request and trivial to override in tests.
     """
     settings = get_settings()
-    return redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+    return redis_lib.Redis.from_url(str(settings.redis_url), decode_responses=True)
 
 
 RedisClient = Annotated[redis_lib.Redis, Depends(get_redis)]
