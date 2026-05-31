@@ -33,3 +33,6 @@ redis_data/
 backend/dist/
 frontend/dist/
 frontend/coverage/
+
+# Local isolated worktrees
+.worktrees/
