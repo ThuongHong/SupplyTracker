@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.routes.chat import router as chat_router
+from app.api.routes.brief import router as brief_router
 from app.api.routes.chokepoints import router as chokepoints_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.health import router as health_router
@@ -24,6 +25,7 @@ router.include_router(chokepoints_router)
 router.include_router(indices_router)
 router.include_router(risk_router)
 router.include_router(story_router)
+router.include_router(brief_router)
 router.include_router(news_router)
 router.include_router(dashboard_router)
 router.include_router(insights_router)
