@@ -84,6 +84,7 @@ def detect_events(
     entity_type = snapshot.entity_type
     entity_id = snapshot.entity_id
     entity_name = snapshot.entity_name
+    display = entity_name or entity_id
     current_severity = snapshot.severity or "unknown"
 
     z_scores: dict[str, dict[str, float | None]] = snapshot.z_scores or {}
@@ -98,7 +99,8 @@ def detect_events(
             bl = baseline_values.get(metric, {})
             expected = bl.get("mean_30d") or bl.get("mean_90d")
             narrative = (
-                f"Metric {metric} z-score {z_30:.1f} on {date_str} for {entity_id}"
+                f"{metric.replace('_', ' ').capitalize()} z-score "
+                f"{z_30:.1f} on {date_str} for {display}"
             )
             key = _event_key(entity_type, entity_id, date_str, "z_spike", metric)
             event_data: dict[str, Any] = {
@@ -132,7 +134,7 @@ def detect_events(
         event_type = "severity_step_up"
         narrative = (
             f"Severity increased from {prev_severity} to {current_severity} "
-            f"on {date_str} for {entity_id}"
+            f"on {date_str} for {display}"
         )
         key = _event_key(entity_type, entity_id, date_str, event_type)
         event_data = {
@@ -158,7 +160,7 @@ def detect_events(
         event_type = "severity_step_down"
         narrative = (
             f"Severity decreased from {prev_severity} to {current_severity} "
-            f"on {date_str} for {entity_id}"
+            f"on {date_str} for {display}"
         )
         key = _event_key(entity_type, entity_id, date_str, event_type)
         event_data = {
@@ -218,8 +220,8 @@ def detect_events(
         if all_above or all_below:
             direction_label = "above" if all_above else "below"
             narrative = (
-                f"Metric {metric} has been {direction_label} its mean for 5+ days "
-                f"as of {date_str} for {entity_id}"
+                f"{metric.replace('_', ' ').capitalize()} has been {direction_label} "
+                f"its mean for 5+ days as of {date_str} for {display}"
             )
             key = _event_key(entity_type, entity_id, date_str, "sustained_streak", metric)
             event_data = {

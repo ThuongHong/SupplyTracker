@@ -70,13 +70,19 @@ def materialize_insights(
 
 
 def _build_title(event: RiskStoryEvent) -> str:
-    """Build a short title string from the event."""
+    """Build a short, human-readable title string from the event.
+
+    Uses the display name (e.g. "Qingdao") rather than the raw entity id
+    ("port1188"), and humanizes the metric key ("port_calls" -> "port calls").
+    """
+    name = event.entity_name or event.entity_id
+    metric = (event.metric or "").replace("_", " ")
     if event.event_type == "z_spike":
-        return f"Anomalous spike in {event.metric} at {event.entity_id}"
+        return f"Anomalous spike in {metric} at {name}"
     if event.event_type == "severity_step_up":
-        return f"Risk severity escalated at {event.entity_id}"
+        return f"Risk severity escalated at {name}"
     if event.event_type == "severity_step_down":
-        return f"Risk severity reduced at {event.entity_id}"
+        return f"Risk severity reduced at {name}"
     if event.event_type == "sustained_streak":
-        return f"Sustained trend in {event.metric} at {event.entity_id}"
-    return f"Risk event at {event.entity_id}: {event.event_type}"
+        return f"Sustained trend in {metric} at {name}"
+    return f"Risk event at {name}: {event.event_type}"
