@@ -61,9 +61,9 @@ function indexByName(indices: IndexSummary[], names: string[]) {
 function buildHeadline(insights: InsightItem[], indices: IndexSummary[]) {
   const lead = insights.find((item) => item.attention_level === 'critical' || item.attention_level === 'high')
   if (lead) return lead.title
-  const bdi = indexByName(indices, ['bdi', 'baltic'])
-  if (bdi) {
-    return `Freight tape ${bdi.change_pct_7d >= 0 ? 'firms' : 'softens'} as port risk remains under watch`
+  const freight = indexByName(indices, ['fbx', 'bdi', 'baltic'])
+  if (freight) {
+    return `Freight tape ${freight.change_pct_7d >= 0 ? 'firms' : 'softens'} as port risk remains under watch`
   }
   return 'Global supply chain risk opens steady with watchpoints across ports and arteries'
 }
@@ -383,8 +383,29 @@ export default function OverviewView() {
     [chokepoints],
   )
 
-  const bdi = indexByName(indices, ['bdi', 'baltic'])
-  const anomalyCount = insights.filter((item) => item.attention_level === 'critical' || item.attention_level === 'high').length
+  // Scope insights to tracked entities so the hero headline/fallback match the
+  // tracked-scoped brief. Ports key off portid; chokepoints off a name slug
+  // (collector convention), matching the insight's affected_entities ids.
+  const trackedEntityIds = useMemo(() => {
+    const ids = new Set<string>(ports.map((port) => port.portid))
+    chokepoints
+      .filter((cp) => cp.is_tracked)
+      .forEach((cp) => ids.add(cp.name.toLowerCase().replace(/ /g, '_')))
+    return ids
+  }, [ports, chokepoints])
+
+  const scopedInsights = useMemo(
+    () =>
+      insights.filter((item) =>
+        (item.affected_entities ?? []).some((entity) => trackedEntityIds.has(entity.id)),
+      ),
+    [insights, trackedEntityIds],
+  )
+
+  // FBX (Freightos Baltic Index) is the freight tape actually collected; there is
+  // no separate "BDI" series in the data.
+  const freight = indexByName(indices, ['fbx', 'bdi', 'baltic'])
+  const anomalyCount = scopedInsights.filter((item) => item.attention_level === 'critical' || item.attention_level === 'high').length
   const congestedPorts = ports.filter((port) => scoreOf(port) >= 60).length
 
   return (
@@ -393,7 +414,7 @@ export default function OverviewView() {
         <article>
           <p className="label-cap">Morning Brief</p>
           <h1 className="serif mt-3 text-5xl font-semibold leading-[0.96] text-[color:var(--ink)] md:text-7xl">
-            {buildHeadline(insights, indices)}
+            {buildHeadline(scopedInsights, indices)}
           </h1>
           <p className="label-cap mt-5">By SupplyTracker risk desk{briefAsOf ? ` · as of ${briefAsOf}` : ''}</p>
           <div className="mt-6 max-w-3xl text-[color:var(--ink-2)]">
@@ -409,10 +430,10 @@ export default function OverviewView() {
                   briefFailed || !brief
                     ? buildFallbackBrief({
                         topRiskTitle:
-                          insights.find(
+                          scopedInsights.find(
                             (item) => item.attention_level === 'critical' || item.attention_level === 'high',
                           )?.title ?? null,
-                        bdiChangePct7d: bdi?.change_pct_7d ?? null,
+                        bdiChangePct7d: freight?.change_pct_7d ?? null,
                         congestedPorts,
                       })
                     : brief
@@ -426,7 +447,7 @@ export default function OverviewView() {
           <p className="label-cap">Evidence</p>
           <div className="mt-4 divide-y divide-[color:var(--rule-hair)]">
             {[
-              { label: 'BDI', value: bdi ? formatNumber(bdi.latest_value, 0) : '-', delta: bdi ? formatPct(bdi.change_pct_7d) : '-' },
+              { label: 'FBX', value: freight ? formatNumber(freight.latest_value, 0) : '-', delta: freight ? formatPct(freight.change_pct_7d) : '-' },
               { label: 'Ports monitored', value: formatNumber(ports.length, 0), delta: `${congestedPorts} congested` },
               { label: 'Chokepoints', value: formatNumber(chokepoints.length, 0), delta: `${sortedChokepoints.slice(0, 3).length} lead watch` },
               { label: 'Open anomalies', value: formatNumber(anomalyCount, 0), delta: insightsLoading ? 'Loading' : 'High+ severity' },

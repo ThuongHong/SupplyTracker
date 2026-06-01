@@ -219,6 +219,7 @@ export interface InsightItem {
   entity_type?: string
   entity_id?: string
   entity_name?: string
+  affected_entities?: { id: string; type: string }[]
   timestamp?: string
 }
 
