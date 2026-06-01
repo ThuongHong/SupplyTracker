@@ -87,3 +87,23 @@ class TestBrief:
         body = resp.json()
         assert body["brief"] == "## Situation\nAll clear."
         assert body["as_of"]
+
+    def test_empty_data_skips_llm_and_returns_steady_fallback(
+        self, mock_session, client, monkeypatch
+    ):
+        """No events + no insights => never call the LLM (avoids refusal text)."""
+        empty_query = MagicMock()
+        empty_query.order_by.return_value.limit.return_value.all.return_value = []
+        mock_session.query.side_effect = [empty_query, empty_query]
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("get_decision_brief must not run with empty data")
+
+        monkeypatch.setattr("app.api.routes.brief.get_decision_brief", _boom)
+
+        resp = client.get("/api/v1/brief")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "steady" in body["brief"].lower()
+        assert body["as_of"]
