@@ -281,7 +281,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
               onClick={handleSync}
               disabled={syncing || untracking}
               className="flex items-center gap-1.5 px-3 py-1.5 border border-[color:var(--rule-thin)] text-sm font-medium transition-colors hover:bg-[color:var(--paper-2)] focus-ring disabled:opacity-60 disabled:cursor-not-allowed"
-              aria-label={isTracked ? 'Re-sync port data' : 'Sync port data'}
+              aria-label={isTracked ? 'Re-sync port data' : 'Track port'}
             >
               {syncing ? (
                 <>
@@ -291,7 +291,7 @@ export default function PortDetailView({ id }: PortDetailViewProps) {
               ) : (
                 <>
                   <IconRefresh className="w-4 h-4 text-[color:var(--ink-4)]" />
-                  {isTracked ? 'Re-sync' : 'Sync data'}
+                  {isTracked ? 'Re-sync' : 'Track'}
                 </>
               )}
             </button>

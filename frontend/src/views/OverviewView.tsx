@@ -328,7 +328,9 @@ export default function OverviewView() {
   useEffect(() => tracked.ports.subscribe(() => setTrackedPortIds(new Set(tracked.ports.getAll()))), [])
 
   useEffect(() => {
-    fetchPorts({ limit: 200 })
+    // Overview is the user's tracked dashboard: scope ports to what they track,
+    // so the "Ports monitored" count, congestion, and digest match the brief.
+    fetchPorts({ tracked: true, limit: 200 })
       .then((res) => setPorts(res.items))
       .catch((e: Error) => setPortsError(e.message))
       .finally(() => setPortsLoading(false))
