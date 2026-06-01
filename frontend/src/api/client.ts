@@ -91,6 +91,8 @@ export async function apiFetch<T>(
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
+    // Bypass ngrok-free browser interstitial so fetch gets JSON, not HTML
+    'ngrok-skip-browser-warning': 'true',
     ...(extraHeaders as Record<string, string>),
   }
 
@@ -166,6 +168,7 @@ export async function* apiStream(
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      'ngrok-skip-browser-warning': 'true',
     },
     body: JSON.stringify(body),
   })

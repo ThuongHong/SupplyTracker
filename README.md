@@ -174,6 +174,72 @@ After `make bootstrap`, check:
 - Flower lists registered Celery tasks at http://localhost:5555
 - Mailpit opens at http://localhost:8025
 
+## Vercel Frontend + ngrok Backend (Split Deploy)
+
+You can host the frontend on Vercel while the backend stack keeps running on your
+own machine via Docker Compose, exposed publicly through an ngrok tunnel.
+
+### 1. Run the backend locally
+
+```bash
+make up
+make bootstrap
+```
+
+The backend listens on `http://localhost:8000`.
+
+### 2. Tunnel the backend with ngrok
+
+A reserved ngrok domain keeps the URL stable, so you only configure Vercel once:
+
+```bash
+ngrok config add-authtoken <your-token>      # one-time
+ngrok http --url=<your-domain>.ngrok-free.dev 8000
+```
+
+ngrok-free serves a browser interstitial on requests with a browser User-Agent.
+The frontend API client sends the `ngrok-skip-browser-warning: true` header on
+every request (`frontend/src/api/client.ts`) so `fetch()` receives JSON instead
+of the warning HTML.
+
+### 3. Allow the Vercel origin in CORS
+
+Add your Vercel URL to `CORS_ORIGINS` in `.env` (comma-separated, no trailing
+path):
+
+```bash
+CORS_ORIGINS=http://localhost:5173,https://<your-app>.vercel.app
+```
+
+Recreate the backend container so the new env is loaded. `docker compose
+restart` does **not** re-read `.env` — use:
+
+```bash
+docker compose up -d backend
+```
+
+Verify the preflight returns the origin:
+
+```bash
+curl -s -i -X OPTIONS http://localhost:8000/api/v1/ \
+  -H "Origin: https://<your-app>.vercel.app" \
+  -H "Access-Control-Request-Method: GET" | grep -i access-control-allow-origin
+```
+
+### 4. Point Vercel at the tunnel
+
+In the Vercel project: Settings → Environment Variables:
+
+```
+VITE_API_BASE_URL = https://<your-domain>.ngrok-free.dev
+```
+
+`VITE_` vars are injected at build time, so redeploy after changing it. With a
+reserved ngrok domain you set this once and never redeploy for tunnel changes.
+
+The frontend stays up on Vercel even while your machine is off; API-backed views
+only work while the backend and ngrok tunnel are running.
+
 ## Current Deployment Posture
 
 The project is currently optimized for one-host Docker Compose deployment. For a
