@@ -335,7 +335,9 @@ export default function OverviewView() {
       .catch((e: Error) => setPortsError(e.message))
       .finally(() => setPortsLoading(false))
 
-    fetchChokepoints({ limit: 100 })
+    // Tracked-only, like ports: the Evidence count, atlas, and arteries table
+    // all reflect what the user tracks (matches the tracked-scoped brief).
+    fetchChokepoints({ tracked: true, limit: 200 })
       .then((res) => setChokepoints(res.items))
       .catch(() => undefined)
       .finally(() => setChokepointsLoading(false))
