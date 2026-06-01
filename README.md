@@ -1,12 +1,80 @@
 # SupplyTracker
 
-SupplyTracker is a Docker Compose based analytics dashboard for monitoring ports,
-chokepoints, freight indices, bunker prices, macro signals, and AI-generated
-supply-chain briefs.
+SupplyTracker is an early-warning dashboard for global supply chains. It watches
+the ports and maritime chokepoints that world trade flows through, turns raw
+activity data into a daily risk score for each one, flags when something looks
+abnormal, and explains what it means in plain language using an LLM.
 
-The current deployment model is intentionally simple: run the full stack with
-Docker Compose. Compose starts the React frontend, FastAPI backend, Postgres,
-Redis, Celery workers, scheduled jobs, Flower, and Mailpit from one repository.
+The goal: instead of reading a dozen disconnected feeds, an analyst opens one
+screen and sees *where pressure is building right now and why* — a congested
+port, a slowdown at the Suez or Panama Canal, a freight-rate spike, a macro
+signal turning — with a written brief that connects the dots.
+
+The whole stack runs from one repository with Docker Compose: React frontend,
+FastAPI backend, Postgres/PostGIS, Redis, Celery workers, scheduled jobs, plus
+Flower and Mailpit for local observability.
+
+## What It Tracks
+
+- **Ports** — throughput, congestion, and dwell signals for the world's major
+  container and bulk ports (sourced from IMF PortWatch).
+- **Chokepoints** — transit activity through critical passages (Suez, Panama,
+  Bab-el-Mandeb, Hormuz, Malacca, etc.) where a single disruption ripples
+  outward across routes.
+- **Freight & fuel** — container freight indices (FBX/WCI) and bunker fuel
+  prices as cost-pressure signals.
+- **Macro** — FRED economic indicators that move with trade demand.
+- **News** — recent articles tied to each tracked port or chokepoint.
+
+## Key Features
+
+- **Per-entity risk scoring.** A scheduled pipeline computes a statistical
+  baseline for every tracked port and chokepoint, then scores current activity
+  against it. Scores are z-score driven, so "abnormal" is measured against each
+  entity's own normal, not a global threshold.
+- **Event detection.** When a signal breaks out of its expected range, the
+  system records a discrete event (`RiskStoryEvent`) instead of just a number —
+  so you get a timeline of *what happened when*, not only a gauge.
+- **Disruption propagation.** A chokepoint event doesn't stay local. The scorer
+  propagates its impact outward to the ports and routes that depend on that
+  passage, surfacing second-order risk.
+- **AI narratives & briefs.** High- and medium-severity events are turned into
+  written insights by an LLM (DashScope Qwen). The Overview page also generates
+  a daily decision **brief** that summarizes the current picture, and a **chat**
+  endpoint lets you ask questions against the live data.
+- **Story feed.** A chronological feed of detected events with their narratives,
+  so the dashboard reads like a running situation report.
+- **Track / untrack control.** You choose which ports and chokepoints to follow;
+  collection, scoring, and news only run for tracked entities.
+
+## How It Works
+
+The data path is a scheduled pipeline owned by Celery beat:
+
+```
+Collectors        →  Scoring DAG                       →  AI layer        →  API / UI
+(PortWatch, FRED,    1. compute baselines                 narrate events     FastAPI +
+ FBX/WCI, bunker,    2. score ports + chokepoints         daily brief        SSE streams
+ GNews)              3. detect events                     chat over data     ↓
+                     4. propagate chokepoint disruption                      React dashboard
+                     5. materialize insights                                 (Overview, Ports,
+                     6. fill narratives (async LLM)                           Chokepoints)
+```
+
+1. **Collect.** Celery tasks pull fresh data from each source on a schedule and
+   store it in Postgres (PostGIS for geo).
+2. **Score.** The scoring DAG (`backend/app/tasks/score.py`) computes baselines,
+   scores each entity, detects events, propagates chokepoint disruption, and
+   materializes insight rows.
+3. **Narrate.** A separate async task calls the LLM to write narratives, so slow
+   model calls never block scoring.
+4. **Serve.** FastAPI exposes the results; AI chat and briefs stream over
+   Server-Sent Events. The React app renders three views — **Overview**
+   (market + top risks + brief), **Ports**, and **Chokepoints** — each with
+   detail pages showing history, news, and the event timeline.
+
+The frontend is a lightweight hash-routed SPA (`/#/overview`, `/#/ports`,
+`/#/chokepoints`) so it deploys cleanly to static hosts like Vercel.
 
 ![SupplyTracker overview](docs/images/supplytracker-overview.png)
 
