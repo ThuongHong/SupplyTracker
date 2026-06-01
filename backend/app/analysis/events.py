@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.analysis.scoring import is_adverse_deviation
 from app.db.models import PortWatchMetric, RiskFeatureSnapshot, RiskStoryEvent
 
 # Severity / attention mappings per event type
@@ -98,9 +99,15 @@ def detect_events(
             observed = feature_values.get(metric)
             bl = baseline_values.get(metric, {})
             expected = bl.get("mean_30d") or bl.get("mean_90d")
+            # Respect the metric's direction: a surge in a "higher_is_better"
+            # metric (e.g. port calls up) is favorable, not a disruption.
+            adverse = is_adverse_deviation(metric, z_30)
+            metric_label = metric.replace("_", " ")
+            move = "fell" if z_30 < 0 else "surged"
+            framing = "" if adverse else " (favorable, above baseline)"
             narrative = (
-                f"{metric.replace('_', ' ').capitalize()} z-score "
-                f"{z_30:.1f} on {date_str} for {display}"
+                f"{metric_label.capitalize()} {move} to z-score "
+                f"{z_30:.1f} on {date_str} for {display}{framing}"
             )
             key = _event_key(entity_type, entity_id, date_str, "z_spike", metric)
             event_data: dict[str, Any] = {
@@ -110,7 +117,7 @@ def detect_events(
                 "entity_id": entity_id,
                 "entity_name": entity_name,
                 "event_type": "z_spike",
-                "severity": _SEVERITY_MAP["z_spike"],
+                "severity": _SEVERITY_MAP["z_spike"] if adverse else "low",
                 "metric": metric,
                 "observed": observed,
                 "expected": expected,
@@ -122,7 +129,7 @@ def detect_events(
                 ),
                 "narrative": narrative,
                 "confidence": _CONFIDENCE_MAP["z_spike"],
-                "attention_level": _ATTENTION_MAP["z_spike"],
+                "attention_level": _ATTENTION_MAP["z_spike"] if adverse else "low",
             }
             events.append(_upsert_event(session, event_data))
 

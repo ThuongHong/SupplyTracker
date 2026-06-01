@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.analysis.macro_correlation import macro_sensitivity
+from app.analysis.scoring import is_adverse_deviation
 from app.db.models import (
     BunkerPrice,
     Chokepoint,
@@ -287,9 +288,18 @@ def _summary_context(
     else:
         metric, stats, pct = None, AnomalyStats(), None
 
+    # Favorability of the headline deviation: a surge in a higher_is_better metric
+    # (e.g. throughput up) is favorable, not a disruption.
+    favorability: str | None = None
+    if metric and stats.z_score is not None:
+        favorability = (
+            "adverse" if is_adverse_deviation(metric, stats.z_score) else "favorable"
+        )
+
     # Terse digest of OTHER elevated/high metrics (cap 3) — cheap to tokenize.
     notable = [
-        f"{m}: z={s.z_score:.2f} ({s.anomaly_level})"
+        f"{m}: z={s.z_score:.2f} ({s.anomaly_level}, "
+        f"{'adverse' if is_adverse_deviation(m, s.z_score) else 'favorable'})"
         for m, s, _ in anomalies[1:]
         if s.z_score is not None and s.anomaly_level in ("elevated", "high")
     ][:3]
@@ -305,6 +315,7 @@ def _summary_context(
         "z_score": stats.z_score,
         "p_value": stats.p_value,
         "anomaly_level": stats.anomaly_level,
+        "favorability": favorability,
         "throughput_pct_change": pct,
         "metric_anomalies": notable,
         "risk_latest": dash.stats.risk_latest,
@@ -372,22 +383,28 @@ def _summary_sections(ctx: dict[str, Any]) -> dict[str, str]:
         notable_clause = (
             f" Other metrics also off-baseline: {'; '.join(notable)}." if notable else ""
         )
+        favorability = ctx.get("favorability")
+        adverse = favorability != "favorable"
         elevated = ctx["anomaly_level"] in ("elevated", "high")
+        if favorability == "favorable":
+            so_what = (
+                f"This {abs(z):.2f}σ move is favorable (above baseline in a "
+                f"beneficial direction), not a disruption."
+            )
+        else:
+            so_what = f"This is a {ctx['anomaly_level']} anomaly likelihood."
         return {
             "what_happened": (
                 f"Over the last {window}, {name}'s most anomalous metric ({ctx['metric']}) "
                 f"sits {abs(z):.2f}σ {direction} its trailing mean "
                 f"(z={z:.2f}, p={ctx['p_value']:.3f})." + trend_clause + notable_clause
             ),
-            "so_what": (
-                f"This is a {ctx['anomaly_level']} anomaly likelihood."
-                + risk_clause + macro_clause + disruption_clause
-            ),
+            "so_what": (so_what + risk_clause + macro_clause + disruption_clause),
             "to_do": (
                 "Watch related news and downstream entities for disruption signals; "
                 "consider flagging this entity for closer monitoring."
-                if elevated or disruptions
-                else "No action needed; throughput is within its normal range."
+                if (elevated and adverse) or disruptions
+                else "No action needed; activity is within or above its normal range."
             ),
         }
 
@@ -403,7 +420,13 @@ def _summary_sections(ctx: dict[str, Any]) -> dict[str, str]:
                     "You are a maritime supply-chain analyst writing a briefing for a "
                     "logistics manager. The headline metric is the entity's most "
                     "anomalous one (`metric`); `metric_anomalies` lists other metrics "
-                    "also off-baseline. Using ALL the provided evidence (the headline "
+                    "also off-baseline. IMPORTANT: respect `favorability` — an "
+                    "'adverse' deviation raises risk (e.g. throughput dropping, freight "
+                    "stress rising), while a 'favorable' one is beneficial (e.g. port "
+                    "calls or transit volume surging above baseline). Never describe a "
+                    "favorable surge as a disruption or crisis; frame it as positive "
+                    "and keep the risk language proportionate to the composite risk "
+                    "score. Using ALL the provided evidence (the headline "
                     "z-score anomaly + trend, other anomalous metrics, composite risk "
                     "score, macro-index lead-lag correlations, and linked disruptions), "
                     "return a JSON object with exactly three string keys:\n"

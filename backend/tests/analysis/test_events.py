@@ -6,7 +6,26 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from app.analysis.events import detect_events
+from app.analysis.scoring import is_adverse_deviation
 from app.db.models import RiskFeatureSnapshot, RiskStoryEvent
+
+
+class TestIsAdverseDeviation:
+    def test_higher_is_better_drop_is_adverse(self) -> None:
+        assert is_adverse_deviation("port_calls", -3.0) is True
+        assert is_adverse_deviation("transit_calls", -2.5) is True
+
+    def test_higher_is_better_surge_is_favorable(self) -> None:
+        assert is_adverse_deviation("port_calls", 28.0) is False
+        assert is_adverse_deviation("import_volume", 5.0) is False
+
+    def test_higher_is_worse_flips(self) -> None:
+        # freight_index / news rising is adverse
+        assert is_adverse_deviation("freight_index", 3.0) is True
+        assert is_adverse_deviation("freight_index", -3.0) is False
+
+    def test_unknown_metric_is_adverse(self) -> None:
+        assert is_adverse_deviation("mystery", 5.0) is True
 
 
 def _make_snapshot(
@@ -51,8 +70,9 @@ def _make_session(streak_rows: list | None = None) -> MagicMock:
 
 
 class TestZSpikeDetection:
-    def test_z_spike_emitted_when_z_gte_25(self) -> None:
-        """When |z_30d| >= 2.5 for a metric, a z_spike event must be produced."""
+    def test_favorable_surge_is_low_severity(self) -> None:
+        """A surge in a higher_is_better metric (port_calls up) is favorable,
+        so the z_spike event is emitted but at low severity/attention."""
         z_scores = {"port_calls": {"z_30d": 3.0, "z_90d": 2.8}}
         feature_values = {"port_calls": 120.0}
         baseline_values = {"port_calls": {"mean_30d": 80.0, "stdev_30d": 10.0}}
@@ -69,9 +89,31 @@ class TestZSpikeDetection:
         assert len(spike_events) == 1
         assert spike_events[0].metric == "port_calls"
         assert spike_events[0].z_score == pytest.approx(3.0)
+        assert spike_events[0].severity == "low"
+        assert spike_events[0].attention_level == "low"
+        assert "favorable" in spike_events[0].narrative.lower()
+
+    def test_adverse_drop_is_high_severity(self) -> None:
+        """A drop in a higher_is_better metric (port_calls down) is adverse,
+        so the z_spike event keeps high severity/attention."""
+        z_scores = {"port_calls": {"z_30d": -3.0, "z_90d": -2.8}}
+        feature_values = {"port_calls": 40.0}
+        baseline_values = {"port_calls": {"mean_30d": 80.0, "stdev_30d": 10.0}}
+        snap = _make_snapshot(
+            z_scores=z_scores,
+            feature_values=feature_values,
+            baseline_values=baseline_values,
+        )
+        session = _make_session()
+
+        events = detect_events(session, snap, prev_severity=None)
+
+        spike_events = [e for e in events if e.event_type == "z_spike"]
+        assert len(spike_events) == 1
         assert spike_events[0].severity == "high"
         assert spike_events[0].confidence == pytest.approx(0.9)
         assert spike_events[0].attention_level == "high"
+        assert "fell" in spike_events[0].narrative.lower()
 
     def test_no_z_spike_when_z_below_25(self) -> None:
         z_scores = {"port_calls": {"z_30d": 2.0, "z_90d": 1.5}}

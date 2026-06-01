@@ -61,6 +61,32 @@ def load_components() -> tuple[list[ComponentDef], dict[str, Any]]:
     return components, _config
 
 
+# Metric → direction map ("higher_is_better" | "higher_is_worse"), from the YAML.
+_METRIC_DIRECTION: dict[str, str] = {
+    c["metric"]: c["direction"] for c in _config["components"]
+}
+
+
+def metric_direction(metric: str) -> str | None:
+    """Return the configured direction for a metric, or None if unknown."""
+    return _METRIC_DIRECTION.get(metric)
+
+
+def is_adverse_deviation(metric: str, z_score: float) -> bool:
+    """True if a deviation raises risk per the metric's direction.
+
+    For ``higher_is_better`` metrics (throughput, volumes, transit) a drop
+    (z < 0) is adverse and a surge (z > 0) is favorable. For ``higher_is_worse``
+    metrics (news pressure, macro stress) the signs flip. Unknown metrics are
+    treated as adverse (conservative)."""
+    direction = metric_direction(metric)
+    if direction == "higher_is_better":
+        return z_score < 0
+    if direction == "higher_is_worse":
+        return z_score > 0
+    return True
+
+
 def severity_from_score(score: float, thresholds: list[float]) -> str:
     """Map a score in [0,1] to a severity label using the threshold list.
 

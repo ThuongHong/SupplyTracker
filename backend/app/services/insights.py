@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.analysis.scoring import is_adverse_deviation
 from app.db.models import Insight, RiskStoryEvent
 
 _HIGH_ATTENTION = {"high", "medium"}
@@ -78,7 +79,11 @@ def _build_title(event: RiskStoryEvent) -> str:
     name = event.entity_name or event.entity_id
     metric = (event.metric or "").replace("_", " ")
     if event.event_type == "z_spike":
-        return f"Anomalous spike in {metric} at {name}"
+        z = event.z_score or 0.0
+        move = "drop" if z < 0 else "surge"
+        if is_adverse_deviation(event.metric or "", z):
+            return f"Anomalous {move} in {metric} at {name}"
+        return f"Favorable {move} in {metric} at {name}"
     if event.event_type == "severity_step_up":
         return f"Risk severity escalated at {name}"
     if event.event_type == "severity_step_down":
