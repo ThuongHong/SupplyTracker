@@ -4,9 +4,10 @@ from datetime import date
 
 from fastapi import APIRouter
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, RedisClient
-from app.db.models import Insight, RiskStoryEvent
+from app.db.models import Chokepoint, Insight, Port, RiskStoryEvent
 from app.llm.brief import get_decision_brief
 from app.schemas.brief import BriefResponse
 
@@ -23,24 +24,56 @@ _STEADY_BRIEF = (
 )
 
 
+def _tracked_entity_ids(db: Session) -> set[str]:
+    """Return the business-key ids (portid/chokepointid) of all tracked entities.
+
+    Events and insights store ``entity_id`` as these same business keys, so this
+    set is what scopes the brief to what the user is actually tracking.
+    """
+    port_ids = db.query(Port.portid).filter(Port.is_tracked.is_(True)).all()
+    chokepoint_ids = (
+        db.query(Chokepoint.chokepointid).filter(Chokepoint.is_tracked.is_(True)).all()
+    )
+    return {row[0] for row in port_ids} | {row[0] for row in chokepoint_ids}
+
+
+def _insight_in_scope(insight: Insight, tracked: set[str]) -> bool:
+    """True if any of the insight's affected entities is currently tracked."""
+    for entity in insight.affected_entities or []:
+        if entity.get("id") in tracked:
+            return True
+    return False
+
+
 @router.get("/brief", response_model=BriefResponse)
 def get_brief(db: DbSession, redis_client: RedisClient) -> BriefResponse:
-    """Return the executive Decision Brief as markdown."""
+    """Return the executive Decision Brief as markdown, scoped to tracked entities."""
+    today = date.today().isoformat()
+
+    tracked = _tracked_entity_ids(db)
+    if not tracked:
+        return BriefResponse(brief=_STEADY_BRIEF, as_of=today)
+
     top_events = (
         db.query(RiskStoryEvent)
+        .filter(RiskStoryEvent.entity_id.in_(tracked))
         .order_by(desc(RiskStoryEvent.event_time))
         .limit(_MAX_EVENTS)
         .all()
     )
-    top_insights = (
+    # Insights carry affected entities in a JSONB list, so scope them in Python.
+    recent_insights = (
         db.query(Insight)
         .order_by(desc(Insight.generated_at))
-        .limit(_MAX_INSIGHTS)
+        .limit(_MAX_INSIGHTS * 4)
         .all()
     )
+    top_insights = [i for i in recent_insights if _insight_in_scope(i, tracked)][
+        :_MAX_INSIGHTS
+    ]
 
     if not top_events and not top_insights:
-        return BriefResponse(brief=_STEADY_BRIEF, as_of=date.today().isoformat())
+        return BriefResponse(brief=_STEADY_BRIEF, as_of=today)
 
     brief = get_decision_brief(db, redis_client, top_events, top_insights)
-    return BriefResponse(brief=brief, as_of=date.today().isoformat())
+    return BriefResponse(brief=brief, as_of=today)
