@@ -25,14 +25,31 @@ def score_and_forecast_entity(
     Best-effort: individual failures are logged, not raised, so a sync still
     succeeds even if scoring/forecast can't run.
     """
+    from app.analysis.events import detect_events
     from app.analysis.forecasting import generate_forecast
     from app.analysis.scoring import load_components, score_entity
+    from app.services.insights import materialize_insights
 
+    snapshot = None
     try:
         components, _ = load_components()
-        score_entity(session, entity_type, entity_id, entity_name, date.today(), components)
+        _, snapshot = score_entity(
+            session, entity_type, entity_id, entity_name, date.today(), components
+        )
     except Exception:
         logger.exception("scoring failed for %s/%s", entity_type, entity_id)
+
+    # Detect events + materialize insights now so the brief and insights feed
+    # reflect a newly tracked entity immediately, without waiting for the hourly
+    # scoring pipeline.
+    if snapshot is not None:
+        try:
+            events = detect_events(session, snapshot, prev_severity=None)
+            materialize_insights(session, events)
+        except Exception:
+            logger.exception(
+                "event detection failed for %s/%s", entity_type, entity_id
+            )
 
     metric = _FORECAST_METRIC.get(entity_type)
     if metric:
