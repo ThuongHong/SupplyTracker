@@ -1,87 +1,186 @@
 # SupplyTracker
 
-SupplyTracker is a PortWatch-driven port and chokepoint analytics dashboard that surfaces real-time vessel-flow data alongside freight indices, bunker prices, and LLM-generated decision briefs. Inspired by hormuztracking.com and built on top of the SupplyChainWatch UI shell, it turns raw IMF PortWatch signals into actionable supply-chain intelligence.
+SupplyTracker is a Docker Compose based analytics dashboard for monitoring ports,
+chokepoints, freight indices, bunker prices, macro signals, and AI-generated
+supply-chain briefs.
 
-## Quick start
+The current deployment model is intentionally simple: run the full stack with
+Docker Compose. Compose starts the React frontend, FastAPI backend, Postgres,
+Redis, Celery workers, scheduled jobs, Flower, and Mailpit from one repository.
 
-**Prerequisites:** Docker Desktop (or Docker Engine + Compose v2), GNU Make.
+![SupplyTracker overview](docs/images/supplytracker-overview.png)
+
+## Screenshots
+
+| Ports | Port detail |
+| --- | --- |
+| ![Tracked ports table](docs/images/supplytracker-ports.png) | ![Port detail view](docs/images/supplytracker-port-detail.png) |
+
+## Stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 18, Vite, TypeScript, Tailwind, Recharts, deck.gl, MapLibre |
+| Backend | FastAPI, SQLAlchemy, Alembic, Pydantic, Server-Sent Events |
+| Data store | Timescale/Postgres with PostGIS extensions |
+| Queue/cache | Redis, Celery worker, Celery beat |
+| Data sources | IMF PortWatch, FRED, FBX/WCI scrapers, bunker price scraper, GNews |
+| AI features | DashScope Qwen via OpenAI-compatible client |
+| Local tools | Flower for Celery monitoring, Mailpit for local SMTP capture |
+
+## Docker Compose Quick Start
+
+Prerequisites:
+
+- Docker Engine or Docker Desktop with Compose v2
+- GNU Make
+- API keys for the optional collectors and AI features you want to enable
 
 ```bash
-git clone <repo-url> && cd SupplyTracker
+git clone <repo-url>
+cd SupplyTracker
 cp .env.example .env
-# Fill in FRED_API_KEY, DASHSCOPE_API_KEY, and any other blank keys
-make up          # builds and starts all services (~2 min first run)
-make bootstrap   # runs DB migrations + seeds 90 days of demo data
 ```
 
-Open http://localhost:5173 — the dashboard should show seeded ports, chokepoints, and macro indices.
-
-| Service     | URL                        |
-|-------------|----------------------------|
-| Frontend    | http://localhost:5173      |
-| Backend API | http://localhost:8000      |
-| API Docs    | http://localhost:8000/docs |
-| Flower      | http://localhost:5555      |
-| Mailpit     | http://localhost:8025      |
-| Postgres    | localhost:5432             |
-| Redis       | localhost:6379             |
-
-## Common make targets
-
-| Target         | What it does                                          |
-|----------------|-------------------------------------------------------|
-| `make up`      | Start all containers                                  |
-| `make down`    | Stop all containers                                   |
-| `make logs`    | Tail all container logs                               |
-| `make migrate` | Apply Alembic migrations                              |
-| `make bootstrap` | Migrate + seed 90 days of synthetic demo data       |
-| `make collect-all` | Trigger a full data collection across all sources |
-| `make forecast`    | Run the daily forecast pass                       |
-| `make test`    | Run backend (pytest) + frontend (vitest) tests        |
-| `make lint`    | Run ruff + mypy on the backend                        |
-| `make shell-be` | Open a shell in the backend container               |
-| `make shell-fe` | Open a shell in the frontend container              |
-
-## Run tests
+Fill in the required values in `.env`:
 
 ```bash
-make test              # all tests inside Docker
-# or locally:
-cd backend && python -m pytest tests/
-cd frontend && npm test
+FRED_API_KEY=...
+GNEWS_API_KEY=...
+DASHSCOPE_API_KEY=...
+SYNC_BEARER_TOKEN=<strong-random-token>
+VITE_SYNC_BEARER_TOKEN=<same-token-if-you-want-the-sync-button>
 ```
 
-## Smoke checklist (after `make bootstrap`)
-
-- [ ] Overview tab: KPI strip counts ports + chokepoints, freshness banner absent, macro indices strip shows FBX/WCI/Brent
-- [ ] Click a macro index card → modal renders full timeseries
-- [ ] Chokepoint Activity strip: selector populates, 50-day AreaChart renders
-- [ ] Ports tab: 14 seeded ports listed; star icon persists across page reload
-- [ ] Port detail: map centered on port, KPI strip, 50-day breakdown chart, forecast panel shows "Insufficient history" (expected for 90-day seed, scoring DAG not yet run)
-- [ ] Chokepoints tab + detail: same as ports
-- [ ] Chatbot widget: floating button opens SSE stream against `/api/v1/chat`
-- [ ] `GET /api/v1/health` returns `{"status":"ok"}`
-- [ ] Flower at :5555 shows registered tasks
-
-## News feed
-
-Port and chokepoint detail pages include a **News** tab in the Event Log card that surfaces Google News RSS articles fetched every 6 hours (no API key required).
-
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `NEWS_FETCH_ENABLED` | `true` | Set to `false` to disable all news collection |
-| `NEWS_MAX_ITEMS_PER_ENTITY` | `30` | Cap on items stored per entity per collection run |
-
-## Sync button
-
-The **Sync** button on port/chokepoint detail pages triggers a force-fetch of all collectors (`POST /sync/all`). It is only visible when an admin bearer token is configured.
-
-The frontend reads the token from `VITE_SYNC_BEARER_TOKEN` (set at build time in `.env`) or from `localStorage.getItem('sync_token')` at runtime. The token must match `SYNC_BEARER_TOKEN` in the backend `.env`.
+Start the stack:
 
 ```bash
-# .env
-SYNC_BEARER_TOKEN=my-strong-random-token
-
-# frontend .env (or set at build time)
-VITE_SYNC_BEARER_TOKEN=my-strong-random-token
+make up
 ```
+
+Apply migrations and seed local demo data:
+
+```bash
+make bootstrap
+```
+
+Open the app:
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API docs: http://localhost:8000/docs
+- Flower: http://localhost:5555
+- Mailpit: http://localhost:8025
+
+## Services
+
+`docker-compose.yml` starts these containers:
+
+| Service | Port | Purpose |
+| --- | --- | --- |
+| `frontend` | `5173` | Vite dev server for the React app |
+| `backend` | `8000` | FastAPI API and SSE endpoints |
+| `postgres` | `5432` | Timescale/Postgres database with PostGIS |
+| `redis` | `6379` | Celery broker/result backend and cache |
+| `celery-worker` | internal | Background collection, scoring, forecasting, and narrative tasks |
+| `celery-beat` | internal | Scheduled collector/scoring/forecast jobs |
+| `flower` | `5555` | Celery task monitor |
+| `mailpit` | `1025`, `8025` | Local SMTP sink and web inbox |
+
+## Make Targets
+
+```bash
+make help
+make up          # build and start the Compose stack
+make down        # stop and remove containers
+make logs        # follow container logs
+make migrate     # run Alembic migrations
+make bootstrap   # migrate, then seed development data
+make test        # run backend pytest suite inside Docker
+make lint        # run backend ruff + mypy inside Docker
+make shell-be    # open a backend container shell
+make shell-fe    # open a frontend container shell
+```
+
+Frontend tests run from the frontend container:
+
+```bash
+docker compose exec frontend npm test
+docker compose exec frontend npm run lint
+```
+
+## Data and Jobs
+
+After `make bootstrap`, the app has demo ports, chokepoints, metrics, and risk
+signals. Live data collection runs through Celery tasks:
+
+- PortWatch tracked-entity refresh
+- FRED macro indicators
+- FBX and WCI freight indices
+- Bunker fuel prices
+- GNews articles for tracked entities
+- Hourly risk scoring
+- Daily forecast pass
+- Daily AI narrative fill
+
+Celery beat owns the schedule in `backend/app/tasks/schedule.py`. Flower at
+http://localhost:5555 is the fastest way to confirm that workers and scheduled
+tasks are registered.
+
+## Sync Button
+
+The UI can expose a protected Sync button on port and chokepoint detail pages.
+It triggers backend sync endpoints such as `POST /api/v1/sync/all`.
+
+Set the same token in backend and frontend env:
+
+```bash
+SYNC_BEARER_TOKEN=<strong-random-token>
+VITE_SYNC_BEARER_TOKEN=<same-token>
+```
+
+The frontend also supports setting `sync_token` in `localStorage` at runtime.
+
+## Environment Notes
+
+Required for a useful local run:
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `CELERY_BROKER_URL`
+- `CELERY_RESULT_BACKEND`
+- `PORTWATCH_BASE_URL`
+- `VITE_API_BASE_URL`
+
+Required for specific features:
+
+- `FRED_API_KEY`: FRED collector
+- `GNEWS_API_KEY`: news collection
+- `DASHSCOPE_API_KEY`: AI chat, decision briefs, and narrative generation
+- `SYNC_BEARER_TOKEN`: protected manual sync endpoints
+- `FBX_SOURCE_URL`, `WCI_SOURCE_URL`: freight index scrapers when external source URLs are configured
+
+See `.env.example` for the full list.
+
+## Smoke Check
+
+After `make bootstrap`, check:
+
+- `GET http://localhost:8000/api/v1/health` reports `status`, `db`, and `redis` as `ok`
+- The Overview page loads market indices, tracked ports, and chokepoints
+- Ports page lists tracked ports and track/untrack controls
+- Chokepoints page lists tracked chokepoints
+- API docs load at http://localhost:8000/docs
+- Flower lists registered Celery tasks at http://localhost:5555
+- Mailpit opens at http://localhost:8025
+
+## Current Deployment Posture
+
+The project is currently optimized for one-host Docker Compose deployment. For a
+VPS, copy the repository, provide a production `.env`, run `make up`, run
+`make migrate`, and place a reverse proxy such as Caddy, Nginx, or Traefik in
+front of the frontend and backend ports.
+
+The split free-tier cloud path can be explored later, but it is not equivalent
+to the Compose stack because this app depends on a database, Redis, background
+workers, and scheduled Celery jobs.
