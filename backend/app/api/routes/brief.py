@@ -24,17 +24,25 @@ _STEADY_BRIEF = (
 )
 
 
-def _tracked_entity_ids(db: Session) -> set[str]:
-    """Return the business-key ids (portid/chokepointid) of all tracked entities.
+def _chokepoint_slug(name: str) -> str:
+    """Chokepoint events key off a lowercase name slug (collector convention),
+    not the ``chokepointid`` business key."""
+    return name.lower().replace(" ", "_")
 
-    Events and insights store ``entity_id`` as these same business keys, so this
-    set is what scopes the brief to what the user is actually tracking.
+
+def _tracked_entity_ids(db: Session) -> set[str]:
+    """Return the ``entity_id`` values used by events/insights for tracked entities.
+
+    Ports use the ``portid`` business key; chokepoints use a name slug. This set
+    is what scopes the brief to what the user is actually tracking.
     """
     port_ids = db.query(Port.portid).filter(Port.is_tracked.is_(True)).all()
-    chokepoint_ids = (
-        db.query(Chokepoint.chokepointid).filter(Chokepoint.is_tracked.is_(True)).all()
+    chokepoint_names = (
+        db.query(Chokepoint.name).filter(Chokepoint.is_tracked.is_(True)).all()
     )
-    return {row[0] for row in port_ids} | {row[0] for row in chokepoint_ids}
+    ids = {row[0] for row in port_ids}
+    ids |= {_chokepoint_slug(row[0]) for row in chokepoint_names}
+    return ids
 
 
 def _insight_in_scope(insight: Insight, tracked: set[str]) -> bool:

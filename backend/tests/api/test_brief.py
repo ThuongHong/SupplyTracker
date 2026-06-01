@@ -141,6 +141,12 @@ class TestBrief:
         assert "steady" in body["brief"].lower()
         assert body["as_of"]
 
+    def test_chokepoint_slug_matches_event_entity_id(self):
+        from app.api.routes.brief import _chokepoint_slug
+
+        assert _chokepoint_slug("Panama Canal") == "panama_canal"
+        assert _chokepoint_slug("Strait of Dover") == "strait_of_dover"
+
     def test_insight_scope_filters_untracked_entities(self):
         from app.api.routes.brief import _insight_in_scope
 
