@@ -92,6 +92,7 @@ services:
         value: localhost
       - key: SMTP_PORT
         value: "1025"
-      # vite_api_base_url is required by config; harmless on the backend.
+      # vite_api_base_url is required by config but unused by the backend (it's
+      # a frontend var). Default placeholder so it isn't a manual dashboard field.
       - key: VITE_API_BASE_URL
-        sync: false
+        value: https://frontend.example.com
