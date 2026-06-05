@@ -16,12 +16,23 @@ _TASK_MODULES = [
 ]
 
 
+def _redis_tls_url(url: str) -> str:
+    """kombu's redis transport rejects a rediss:// URL that omits ssl_cert_reqs.
+    Managed Redis (Upstash) hands out bare rediss:// URLs, so append a default
+    when the caller didn't set one. CERT_NONE keeps TLS encryption without
+    requiring a CA bundle for the provider's cert.
+    """
+    if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
+        return f"{url}{'&' if '?' in url else '?'}ssl_cert_reqs=CERT_NONE"
+    return url
+
+
 def make_celery() -> Celery:
     settings = get_settings()
     app = Celery(
         "supplytracker",
-        broker=str(settings.celery_broker_url),
-        backend=str(settings.celery_result_backend),
+        broker=_redis_tls_url(str(settings.celery_broker_url)),
+        backend=_redis_tls_url(str(settings.celery_result_backend)),
         include=_TASK_MODULES,
     )
     app.config_from_object(
@@ -36,7 +47,6 @@ def make_celery() -> Celery:
             # task_eager_propagates surfaces failures as real exceptions.
             "task_always_eager": settings.celery_task_always_eager,
             "task_eager_propagates": settings.celery_task_always_eager,
-            "task_store_eager_result": settings.celery_task_always_eager,
         }
     )
     return app
