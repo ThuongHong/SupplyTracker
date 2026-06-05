@@ -28,6 +28,28 @@ depends_on: str | None = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
+    # 0. Extensions — bootstrap here so the migration also runs on managed
+    #    Postgres (Supabase/Neon/Render) where docker/postgres/init.sql never
+    #    executes. postgis + pg_trgm are required; timescaledb is OPTIONAL —
+    #    managed providers don't ship it, so create it best-effort and skip the
+    #    hypertable conversions when it's absent (tables stay plain Postgres,
+    #    fully functional, just without time-partitioning).
+    # ------------------------------------------------------------------
+    op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            CREATE EXTENSION IF NOT EXISTS timescaledb;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'timescaledb unavailable — continuing without hypertables';
+        END
+        $$;
+        """
+    )
+
+    # ------------------------------------------------------------------
     # 1. ports  (no FKs — must be first)
     # ------------------------------------------------------------------
     op.create_table(
@@ -586,27 +608,26 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     # TimescaleDB hypertables
     # All 7 time-series tables — if_not_exists keeps upgrades idempotent.
+    # Wrapped in a guard so the migration succeeds on plain Postgres (managed
+    # providers without timescaledb): the conversions only run when the
+    # extension is present, otherwise the tables stay regular Postgres tables.
     # ------------------------------------------------------------------
     op.execute(
-        "SELECT create_hypertable('port_watch_metric', 'observed_at', if_not_exists => TRUE)"
-    )
-    op.execute(
-        "SELECT create_hypertable('freight_index', 'time', if_not_exists => TRUE)"
-    )
-    op.execute(
-        "SELECT create_hypertable('bunker_price', 'time', if_not_exists => TRUE)"
-    )
-    op.execute(
-        "SELECT create_hypertable('port_congestion', 'time', if_not_exists => TRUE)"
-    )
-    op.execute(
-        "SELECT create_hypertable('chokepoint_status', 'time', if_not_exists => TRUE)"
-    )
-    op.execute(
-        "SELECT create_hypertable('port_risk_score', 'time', if_not_exists => TRUE)"
-    )
-    op.execute(
-        "SELECT create_hypertable('chokepoint_risk_score', 'time', if_not_exists => TRUE)"
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+                PERFORM create_hypertable('port_watch_metric', 'observed_at', if_not_exists => TRUE);
+                PERFORM create_hypertable('freight_index', 'time', if_not_exists => TRUE);
+                PERFORM create_hypertable('bunker_price', 'time', if_not_exists => TRUE);
+                PERFORM create_hypertable('port_congestion', 'time', if_not_exists => TRUE);
+                PERFORM create_hypertable('chokepoint_status', 'time', if_not_exists => TRUE);
+                PERFORM create_hypertable('port_risk_score', 'time', if_not_exists => TRUE);
+                PERFORM create_hypertable('chokepoint_risk_score', 'time', if_not_exists => TRUE);
+            END IF;
+        END
+        $$;
+        """
     )
 
 

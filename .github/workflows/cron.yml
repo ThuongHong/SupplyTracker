@@ -1,0 +1,44 @@
+name: pipeline-cron
+
+# Drives the workerless deploy's data pipeline (replaces celery-beat).
+# Hits the bearer-protected /api/v1/cron/run on the Render backend.
+on:
+  schedule:
+    # Daily 05:00 UTC — collectors run, then score/forecast/narrate in order.
+    # GitHub may delay scheduled runs under load; daily cadence tolerates it.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Comma-separated subset of collect,score,forecast,narrate"
+        default: "collect,score,forecast,narrate"
+
+concurrency:
+  group: pipeline-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger pipeline
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          TOKEN: ${{ secrets.SYNC_BEARER_TOKEN }}
+          JOBS: ${{ github.event.inputs.jobs || 'collect,score,forecast,narrate' }}
+        run: |
+          # First call also warms the sleeping Render free instance; retry a few
+          # times so a cold start doesn't fail the run. --max-time covers the
+          # full inline pipeline (collectors + scoring can take a while).
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
+              -X POST "${BACKEND_URL}/api/v1/cron/run?jobs=${JOBS}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              --max-time 600 --connect-timeout 60) && \
+              [ "$code" = "200" ] && break
+            echo "attempt ${attempt}: HTTP ${code:-no-response}, retrying in 30s"
+            sleep 30
+          done
+          echo "HTTP ${code}"
+          cat /tmp/body.txt
+          [ "$code" = "200" ]
