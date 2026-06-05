@@ -23,6 +23,14 @@ global.ResizeObserver = class ResizeObserver {
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
+vi.mock('../components/ui/AreaChart', () => ({
+  AreaChart: ({ series }: { series?: Array<{ name: string }> }) => (
+    <div>
+      {series?.map(item => <span key={item.name}>{item.name}</span>)}
+    </div>
+  ),
+}))
+
 function makeResponse(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -149,6 +157,7 @@ describe('WindowPicker', () => {
 // ─── 8.3 — AnomalyCard ───────────────────────────────────────────────────────
 
 import { AnomalyCard } from '../components/charts/AnomalyCard'
+import { IndicesPanel } from '../components/charts/IndicesPanel'
 
 describe('AnomalyCard', () => {
   const series = [
@@ -181,6 +190,29 @@ describe('AnomalyCard', () => {
   it('shows insufficient-data state when z_score missing', () => {
     render(<AnomalyCard series={series} stats={{ metric: 'x', baseline_n: 3 }} />)
     expect(screen.getByText(/not enough history/i)).toBeDefined()
+  })
+})
+
+describe('IndicesPanel', () => {
+  it('labels freight lines as proxies rather than sample FBX/WCI data', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+
+    render(
+      <IndicesPanel
+        indices={[{ time: '2026-01-01', fbx: 130, wci: 240 }]}
+        bunker={[{ time: '2026-01-01', value: 650 }]}
+      />,
+    )
+
+    expect(screen.getByText('Freight cost proxy (rebased)')).toBeDefined()
+    expect(screen.getByText('Ocean freight proxy (rebased)')).toBeDefined()
+    expect(screen.queryByText('FBX (rebased)')).toBeNull()
+    expect(screen.queryByText('WCI (rebased)')).toBeNull()
   })
 })
 

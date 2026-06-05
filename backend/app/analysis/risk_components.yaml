@@ -58,7 +58,7 @@ components:
   - name: macro_stress
     source: macro
     metric: freight_index
-    index_name: FBX  # global freight rate; rising = system stress
+    index_name: FRGEXPUSM649NCIS  # Cass freight expenditures; rising = system stress
     weight: 0.10
     baseline_window_days: 30
     direction: higher_is_worse

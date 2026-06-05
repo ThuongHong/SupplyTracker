@@ -104,6 +104,14 @@ class TestMacroSensitivity:
         assert "port calls" in f["insight"]
         assert "inverse" in f["insight"]
 
+    def test_fred_freight_proxy_label(self) -> None:
+        n = 14
+        up = _series(1, [float(i) for i in range(n)])
+        down = _series(1, [float(n - i) for i in range(n)])
+        findings = macro_sensitivity({"FRGEXPUSM649NCIS": up}, {"port_calls": down}, top_k=1)
+        assert findings[0]["macro"] == "Cass Freight Expenditures"
+        assert findings[0]["insight"].startswith("Cass Freight Expenditures ")
+
     def test_empty_when_no_overlap(self) -> None:
         macro = {"Brent": _series(1, [1.0, 2.0])}
         metrics = {"port_calls": _series(1, [2.0, 1.0])}

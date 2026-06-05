@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 
 _WINDOW_DAYS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
 _FALLBACK_THROUGHPUT_METRIC = "vessels_in_port"
+_FRED_FREIGHT_PROXY_KEYS: dict[str, tuple[str, int]] = {
+    "FRGEXPUSM649NCIS": ("fbx", 10),  # Cass Freight Index: expenditures
+    "FRGSHPUSM649NCIS": ("fbx", 20),  # Cass Freight Index: shipments fallback
+    "PCU483111483111": ("wci", 10),  # PPI: deep sea freight transportation
+}
 
 # PortWatch per-category port-call metrics → cargo-type label for the mix chart.
 _PORT_CATEGORY_METRICS: dict[str, str] = {
@@ -471,8 +476,17 @@ def _get_default_throughput_metric(session: Session) -> str:
     return row.metric_name if row else _FALLBACK_THROUGHPUT_METRIC
 
 
+def _freight_chart_key(index_name: str) -> tuple[str, int] | None:
+    name_lower = index_name.lower()
+    if "fbx" in name_lower:
+        return ("fbx", 0)
+    if "wci" in name_lower:
+        return ("wci", 0)
+    return _FRED_FREIGHT_PROXY_KEYS.get(index_name.upper())
+
+
 def _build_indices_chart(session: Session, since: datetime) -> list[dict[str, Any]]:
-    """Return pivoted freight-index series with fbx and wci keys."""
+    """Return pivoted freight-index series with fbx and wci-compatible keys."""
     rows = (
         session.query(FreightIndex)
         .filter(FreightIndex.time >= since)
@@ -480,14 +494,18 @@ def _build_indices_chart(session: Session, since: datetime) -> list[dict[str, An
         .all()
     )
     by_date: dict[str, dict[str, Any]] = defaultdict(dict)
+    by_date_priority: dict[str, dict[str, int]] = defaultdict(dict)
     for r in rows:
+        chart_key = _freight_chart_key(r.index_name)
+        if chart_key is None:
+            continue
+        key, priority = chart_key
         date_str = r.time.date().isoformat()
         by_date[date_str]["time"] = date_str
-        name_lower = r.index_name.lower()
-        if "fbx" in name_lower:
-            by_date[date_str]["fbx"] = r.value
-        elif "wci" in name_lower:
-            by_date[date_str]["wci"] = r.value
+        existing_priority = by_date_priority[date_str].get(key)
+        if existing_priority is None or priority < existing_priority:
+            by_date[date_str][key] = r.value
+            by_date_priority[date_str][key] = priority
     return sorted(by_date.values(), key=lambda x: x["time"])
 
 

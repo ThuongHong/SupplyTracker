@@ -7,8 +7,8 @@ interface Props {
 }
 
 const indexSeries = [
-  { key: 'fbx', name: 'FBX (rebased)', color: 'var(--caution)', fillOpacity: 0.15 },
-  { key: 'wci', name: 'WCI (rebased)', color: 'var(--accent)', fillOpacity: 0.15 },
+  { key: 'fbx', name: 'Freight cost proxy (rebased)', color: 'var(--caution)', fillOpacity: 0.15 },
+  { key: 'wci', name: 'Ocean freight proxy (rebased)', color: 'var(--accent)', fillOpacity: 0.15 },
 ]
 
 const bunkerSeries = [

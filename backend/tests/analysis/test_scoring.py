@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from unittest.mock import MagicMock, patch
+from datetime import UTC, date, datetime
+from unittest.mock import MagicMock
 
 import pytest
 
-from app.analysis.scoring import ComponentDef, load_components, severity_from_score
+from app.analysis.scoring import load_components, severity_from_score
 
 
 class TestSeverityFromScore:
@@ -69,7 +69,7 @@ class TestLoadComponents:
         assert by_name["news_pressure"].source == "news"
         assert by_name["news_pressure"].direction == "higher_is_worse"
         assert by_name["macro_stress"].source == "macro"
-        assert by_name["macro_stress"].index_name == "FBX"
+        assert by_name["macro_stress"].index_name == "FRGEXPUSM649NCIS"
 
     def test_weights_sum_to_one_per_entity_type(self) -> None:
         components, _ = load_components()
@@ -84,7 +84,7 @@ class TestScoreEntity:
     def _make_metric_row(self, value: float) -> MagicMock:
         row = MagicMock()
         row.metric_value = value
-        row.observed_at = datetime(2024, 1, 15, tzinfo=timezone.utc)
+        row.observed_at = datetime(2024, 1, 15, tzinfo=UTC)
         return row
 
     def _make_session_with_data(
@@ -170,7 +170,6 @@ class TestScoreEntity:
         components, _ = load_components()
         # Use all components for port+chokepoint (6 total), 2 present → 4/6 missing = 0.67 > 0.5
         # Use only port components (3 total), 2 present → 1/3 missing = 0.33 <= 0.5 → OK
-        port_components = [c for c in components if c.entity_types == ["port"]]
         # port-only (not shared): throughput, dwell_time, congestion
         pure_port = [c for c in components if c.entity_types == ["port"]]
 

@@ -13,7 +13,12 @@ import math
 from typing import Any
 
 # macro index_name -> display label
-_MACRO_LABELS = {"DCOILBRENTEU": "Brent"}
+_MACRO_LABELS = {
+    "DCOILBRENTEU": "Brent",
+    "FRGEXPUSM649NCIS": "Cass Freight Expenditures",
+    "FRGSHPUSM649NCIS": "Cass Freight Shipments",
+    "PCU483111483111": "PPI Deep Sea Freight",
+}
 # metric_name -> display label
 _METRIC_LABELS = {
     "port_calls": "port calls",

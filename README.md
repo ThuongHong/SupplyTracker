@@ -21,8 +21,9 @@ Flower and Mailpit for local observability.
 - **Chokepoints** — transit activity through critical passages (Suez, Panama,
   Bab-el-Mandeb, Hormuz, Malacca, etc.) where a single disruption ripples
   outward across routes.
-- **Freight & fuel** — container freight indices (FBX/WCI) and bunker fuel
-  prices as cost-pressure signals.
+- **Freight & fuel** — FRED freight-cost proxies (Cass Freight Index and deep
+  sea freight PPI), optional FBX/WCI CSV feeds, and bunker fuel prices as
+  cost-pressure signals.
 - **Macro** — FRED economic indicators that move with trade demand.
 - **News** — recent articles tied to each tracked port or chokepoint.
 
@@ -54,8 +55,8 @@ The data path is a scheduled pipeline owned by Celery beat:
 ```
 Collectors        →  Scoring DAG                       →  AI layer        →  API / UI
 (PortWatch, FRED,    1. compute baselines                 narrate events     FastAPI +
- FBX/WCI, bunker,    2. score ports + chokepoints         daily brief        SSE streams
- GNews)              3. detect events                     chat over data     ↓
+ optional FBX/WCI,   2. score ports + chokepoints         daily brief        SSE streams
+ bunker, GNews)      3. detect events                     chat over data     ↓
                      4. propagate chokepoint disruption                      React dashboard
                      5. materialize insights                                 (Overview, Ports,
                      6. fill narratives (async LLM)                           Chokepoints)
@@ -92,7 +93,7 @@ The frontend is a lightweight hash-routed SPA (`/#/overview`, `/#/ports`,
 | Backend | FastAPI, SQLAlchemy, Alembic, Pydantic, Server-Sent Events |
 | Data store | Timescale/Postgres with PostGIS extensions |
 | Queue/cache | Redis, Celery worker, Celery beat |
-| Data sources | IMF PortWatch, FRED, FBX/WCI scrapers, bunker price scraper, GNews |
+| Data sources | IMF PortWatch, FRED freight/macro series, optional FBX/WCI scrapers, bunker price scraper, GNews |
 | AI features | Any OpenAI-compatible LLM (default: Google Gemini; also DashScope Qwen) |
 | Local tools | Flower for Celery monitoring, Mailpit for local SMTP capture |
 
@@ -183,8 +184,8 @@ After `make bootstrap`, the app has demo ports, chokepoints, metrics, and risk
 signals. Live data collection runs through Celery tasks:
 
 - PortWatch tracked-entity refresh
-- FRED macro indicators
-- FBX and WCI freight indices
+- FRED macro indicators and freight proxies
+- Optional FBX and WCI freight-index CSV feeds
 - Bunker fuel prices
 - GNews articles for tracked entities
 - Hourly risk scoring
@@ -223,6 +224,11 @@ Required for a useful local run:
 Required for specific features:
 
 - `FRED_API_KEY`: FRED collector
+- `FRED_SERIES`: comma-separated FRED series IDs. The Render default includes
+  Brent/WTI/US10Y/PPI plus Cass Freight Expenditures (`FRGEXPUSM649NCIS`),
+  Cass Freight Shipments (`FRGSHPUSM649NCIS`), and Deep Sea Freight PPI
+  (`PCU483111483111`). The Macro Indices chart maps these freight proxies into
+  the existing freight/ocean-freight lines.
 - `GNEWS_API_KEY`: news collection
 - `DASHSCOPE_API_KEY`: AI chat, decision briefs, and narrative generation
 - `SYNC_BEARER_TOKEN`: protected manual sync endpoints
