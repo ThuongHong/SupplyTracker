@@ -4,8 +4,9 @@ name: pipeline-cron
 # Hits the bearer-protected /api/v1/cron/run on the Render backend.
 on:
   schedule:
-    # Daily 05:00 UTC. GitHub may delay scheduled runs under load; daily tolerates it.
-    - cron: "0 5 * * *"
+    # Daily 10:00 UTC = 17:00 Vietnam (ICT, UTC+7). GitHub may delay scheduled
+    # runs under load; daily tolerates it.
+    - cron: "0 10 * * *"
   workflow_dispatch:
     inputs:
       jobs:
