@@ -1,0 +1,97 @@
+# Render Blueprint — free-tier backend for SupplyTracker.
+#
+# Topology (all free):
+#   - Frontend  : Vercel (unchanged — set VITE_API_BASE_URL to this service URL)
+#   - Backend   : this Render web service (FastAPI, sleeps after 15 min idle)
+#   - Postgres  : external managed PG with PostGIS (Supabase / Neon) — no
+#                 TimescaleDB needed; the migration skips hypertables when absent
+#   - Redis     : external Upstash (app cache + rate-limit; Celery runs EAGER so
+#                 the broker is never actually used for task transport)
+#   - Scheduler : external cron (cron-job.org / GitHub Actions) → POST /api/v1/cron/run
+#
+# Secrets (sync:false) are set in the Render dashboard, not committed here.
+services:
+  - type: web
+    name: supplytracker-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    # alembic upgrade head is idempotent (no-op at head); runs each cold start.
+    buildCommand: pip install -e .
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      # Workerless: tasks run inline in the web process; external cron drives them.
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "true"
+      # ── Required infra (set in dashboard) ───────────────────────────────
+      # Supabase/Neon connection string. Driver MUST be postgresql+psycopg, e.g.
+      #   postgresql+psycopg://USER:PASS@HOST:5432/postgres?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # Single Upstash URL reused for all three (eager mode ⇒ broker unused).
+      #   rediss://default:PASS@HOST:6379
+      - key: REDIS_URL
+        sync: false
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+      # ── Auth / CORS ─────────────────────────────────────────────────────
+      # Strong random token; also set as the cron job's Bearer + Vercel's
+      # VITE_SYNC_BEARER_TOKEN.
+      - key: SYNC_BEARER_TOKEN
+        sync: false
+      # Comma-separated; include the Vercel origin (no trailing slash).
+      - key: CORS_ORIGINS
+        sync: false
+      # ── Data sources ────────────────────────────────────────────────────
+      - key: PORTWATCH_BASE_URL
+        value: https://services9.arcgis.com/weJ1QsnbMYJlCHdG/ArcGIS/rest/services
+      - key: PORTWATCH_RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: FRED_API_KEY
+        sync: false
+      - key: FRED_SERIES
+        value: DCOILBRENTEU,DCOILWTICO,DGS10,PPIACO
+      - key: BUNKER_PORTS
+        value: SGSIN,AEFJR,NLRTM
+      - key: BUNKER_FUEL_TYPES
+        value: VLSFO,MGO
+      - key: GNEWS_API_KEY
+        sync: false
+      - key: NEWS_FETCH_ENABLED
+        value: "true"
+      - key: NEWS_MAX_ITEMS_PER_ENTITY
+        value: "30"
+      # ── LLM (DashScope Qwen) ────────────────────────────────────────────
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: DASHSCOPE_BASE_URL
+        value: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      - key: QWEN_PRIMARY_MODEL
+        value: qwen-plus
+      - key: QWEN_FALLBACK_MODEL
+        value: qwen-turbo
+      - key: LLM_REASONING_ENABLED
+        value: "false"
+      - key: LLM_REQUEST_TIMEOUT_S
+        value: "60"
+      - key: DECISION_BRIEF_CACHE_TTL_S
+        value: "3600"
+      - key: CHAT_RATE_LIMIT_PER_5MIN
+        value: "20"
+      # ── SMTP (unused on free deploy; values satisfy required config) ─────
+      - key: SMTP_HOST
+        value: localhost
+      - key: SMTP_PORT
+        value: "1025"
+      # vite_api_base_url is required by config; harmless on the backend.
+      - key: VITE_API_BASE_URL
+        sync: false

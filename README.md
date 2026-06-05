@@ -308,13 +308,64 @@ reserved ngrok domain you set this once and never redeploy for tunnel changes.
 The frontend stays up on Vercel even while your machine is off; API-backed views
 only work while the backend and ngrok tunnel are running.
 
+## Free-Tier Cloud Deploy (Render + Supabase + Upstash)
+
+A fully free split deploy without ngrok. Trades the Compose stack's worker/beat
+and TimescaleDB for managed equivalents:
+
+| Piece | Free service | Notes |
+|-------|--------------|-------|
+| Frontend | Vercel | unchanged |
+| Backend (FastAPI) | Render web service | sleeps after 15 min idle (~30 s cold start) |
+| Postgres + PostGIS | Supabase / Neon | no TimescaleDB — migration skips hypertables (tables stay plain Postgres) |
+| Redis | Upstash | app cache + rate-limit; Celery runs eager so the broker isn't used for transport |
+| Scheduler | cron-job.org / GitHub Actions | replaces celery-beat by POSTing `/api/v1/cron/run` |
+
+Two pieces of the Compose stack are intentionally dropped: the **TimescaleDB
+extension** (no free managed PG offers it) and the **Celery worker + beat**
+(background workers aren't free on Render). The migration auto-detects a missing
+`timescaledb` extension and skips the hypertable conversions, and
+`CELERY_TASK_ALWAYS_EAGER=true` runs tasks inline in the web process.
+
+### 1. Provision the managed services
+
+- **Supabase/Neon**: create a project, enable PostGIS (`create extension postgis;`
+  — Supabase has it built-in), and copy the connection string. Rewrite the driver
+  prefix to `postgresql+psycopg://…` and keep `?sslmode=require`.
+- **Upstash**: create a Redis database, copy the `rediss://…` URL.
+
+### 2. Deploy the backend on Render
+
+The repo ships a `render.yaml` Blueprint. In Render: **New → Blueprint**, point at
+this repo. Set the `sync:false` secrets in the dashboard: `DATABASE_URL`,
+`REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` (all three Redis vars =
+the same Upstash URL), `SYNC_BEARER_TOKEN`, `CORS_ORIGINS` (your Vercel origin),
+`FRED_API_KEY`, `GNEWS_API_KEY`, `DASHSCOPE_API_KEY`, and `VITE_API_BASE_URL`.
+The start command runs `alembic upgrade head` (idempotent) then uvicorn.
+
+### 3. Point Vercel at Render
+
+Set `VITE_API_BASE_URL` to the Render service URL and `VITE_SYNC_BEARER_TOKEN`
+to match `SYNC_BEARER_TOKEN`, then redeploy the Vercel project (`VITE_` vars are
+build-time).
+
+### 4. Schedule the pipeline
+
+celery-beat is gone, so drive the pipeline with any external cron hitting the
+bearer-protected endpoint:
+
+```bash
+curl -X POST "https://<render-app>.onrender.com/api/v1/cron/run?jobs=collect,score,forecast,narrate" \
+  -H "Authorization: Bearer <SYNC_BEARER_TOKEN>"
+```
+
+`jobs` accepts any subset of `collect,score,forecast,narrate` (always run in
+dependency order). Point a daily cron-job.org job (or a scheduled GitHub Action)
+at it. The first request after idle also warms the sleeping Render instance.
+
 ## Current Deployment Posture
 
 The project is currently optimized for one-host Docker Compose deployment. For a
 VPS, copy the repository, provide a production `.env`, run `make up`, run
 `make migrate`, and place a reverse proxy such as Caddy, Nginx, or Traefik in
 front of the frontend and backend ports.
-
-The split free-tier cloud path can be explored later, but it is not equivalent
-to the Compose stack because this app depends on a database, Redis, background
-workers, and scheduled Celery jobs.

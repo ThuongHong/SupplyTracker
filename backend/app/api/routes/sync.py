@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.api.deps import AuthRequired, DbSession
 from app.collectors.portwatch import PortWatchCollector
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["sync"])
 
 _VALID_SOURCES = {"portwatch", "fred", "fbx", "wci", "bunker", "news", "catalog", "all"}
+
+# Jobs the /cron/run endpoint can run, in dependency order (collect → score →
+# forecast → narrate). Mirrors what celery-beat schedules, for workerless
+# deploys where an external cron drives the pipeline instead.
+_VALID_CRON_JOBS = ("collect", "score", "forecast", "narrate")
 
 
 @router.post("/sync/{source}", response_model=SyncResponse)
@@ -56,6 +62,74 @@ def trigger_sync(
     logger.info("Triggered sync task '%s' — task_id=%s", source, result.id)
 
     return SyncResponse(task_id=result.id, source=source)
+
+
+# ── Cron driver (workerless deploys) ─────────────────────────────────────────
+
+
+@router.post("/cron/run")
+def cron_run(
+    _auth: AuthRequired,
+    jobs: str = Query(
+        "collect,score,forecast,narrate",
+        description="Comma-separated subset of: collect, score, forecast, narrate",
+    ),
+) -> dict[str, Any]:
+    """Run the data pipeline synchronously — the workerless replacement for
+    celery-beat. An external scheduler (cron-job.org, GitHub Actions, …) hits
+    this with the Bearer token. Each task runs via ``.apply()`` so it executes
+    in-process regardless of the eager flag; set ``CELERY_TASK_ALWAYS_EAGER=true``
+    so nested ``.delay()`` calls inside the pipeline also run inline.
+    """
+    requested = [j.strip() for j in jobs.split(",") if j.strip()]
+    unknown = [j for j in requested if j not in _VALID_CRON_JOBS]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown job(s) {unknown}. Valid: {list(_VALID_CRON_JOBS)}",
+        )
+    # Preserve dependency order regardless of how the caller ordered them.
+    ordered = [j for j in _VALID_CRON_JOBS if j in requested]
+
+    from app.tasks.collect import (
+        collect_bunker,
+        collect_fbx,
+        collect_fred,
+        collect_news,
+        collect_portwatch,
+        collect_wci,
+    )
+    from app.tasks.forecast import run_forecast
+    from app.tasks.narrate import fill_narratives
+    from app.tasks.score import run_pipeline
+
+    results: dict[str, Any] = {}
+    for job in ordered:
+        try:
+            if job == "collect":
+                results["collect"] = {
+                    name: task.apply().result
+                    for name, task in (
+                        ("portwatch", collect_portwatch),
+                        ("fred", collect_fred),
+                        ("fbx", collect_fbx),
+                        ("wci", collect_wci),
+                        ("bunker", collect_bunker),
+                        ("news", collect_news),
+                    )
+                }
+            elif job == "score":
+                results["score"] = run_pipeline.apply().result
+            elif job == "forecast":
+                results["forecast"] = run_forecast.apply().result
+            elif job == "narrate":
+                results["narrate"] = fill_narratives.apply().result
+            logger.info("cron_run job '%s' done", job)
+        except Exception as exc:  # noqa: BLE001 — report per-job, keep going
+            logger.exception("cron_run job '%s' failed", job)
+            results[job] = {"error": str(exc)}
+
+    return {"ran": ordered, "results": results}
 
 
 # ── Per-entity sync = track (90-day backfill) ────────────────────────────────

@@ -31,6 +31,12 @@ def make_celery() -> Celery:
             "accept_content": ["json"],
             "timezone": "UTC",
             "enable_utc": True,
+            # Eager mode runs tasks inline (no worker). Used on workerless
+            # deploys; .delay()/.apply_async() block and execute in-process, and
+            # task_eager_propagates surfaces failures as real exceptions.
+            "task_always_eager": settings.celery_task_always_eager,
+            "task_eager_propagates": settings.celery_task_always_eager,
+            "task_store_eager_result": settings.celery_task_always_eager,
         }
     )
     return app

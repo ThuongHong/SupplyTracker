@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     redis_url: RedisDsn
     celery_broker_url: RedisDsn
     celery_result_backend: RedisDsn
+    # Run Celery tasks inline in the calling process (no worker/beat). Set true
+    # on workerless deploys (e.g. Render free tier) where an external cron hits
+    # the /cron/run endpoint instead of celery-beat scheduling.
+    celery_task_always_eager: bool = False
 
     # Backend
     backend_host: str = "0.0.0.0"
