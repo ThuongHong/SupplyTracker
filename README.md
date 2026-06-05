@@ -93,7 +93,7 @@ The frontend is a lightweight hash-routed SPA (`/#/overview`, `/#/ports`,
 | Data store | Timescale/Postgres with PostGIS extensions |
 | Queue/cache | Redis, Celery worker, Celery beat |
 | Data sources | IMF PortWatch, FRED, FBX/WCI scrapers, bunker price scraper, GNews |
-| AI features | DashScope Qwen via OpenAI-compatible client |
+| AI features | Any OpenAI-compatible LLM (default: Google Gemini; also DashScope Qwen) |
 | Local tools | Flower for Celery monitoring, Mailpit for local SMTP capture |
 
 ## Docker Compose Quick Start

@@ -70,15 +70,17 @@ services:
         value: "true"
       - key: NEWS_MAX_ITEMS_PER_ENTITY
         value: "30"
-      # ── LLM (DashScope Qwen) ────────────────────────────────────────────
+      # ── LLM (OpenAI-compatible; default Google Gemini via AI Studio) ────
+      # Names are historical; values just point the OpenAI SDK at a provider.
+      # Key: https://aistudio.google.com/apikey . BASE_URL must end with /openai/.
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: DASHSCOPE_BASE_URL
-        value: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
       - key: QWEN_PRIMARY_MODEL
-        value: qwen-plus
+        value: gemini-2.5-flash
       - key: QWEN_FALLBACK_MODEL
-        value: qwen-turbo
+        value: gemini-2.0-flash
       - key: LLM_REASONING_ENABLED
         value: "false"
       - key: LLM_REQUEST_TIMEOUT_S
