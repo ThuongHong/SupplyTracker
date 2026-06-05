@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -81,13 +81,33 @@ def test_indices_chart_keeps_monthly_fred_proxy_data_for_short_windows() -> None
     assert chart == [{"time": "2026-04-01", "fbx": 130.0, "wci": 240.0}]
 
 
-def test_indices_chart_excludes_fred_proxy_data_older_than_90d_lookback() -> None:
+def _instant_row(when: datetime, index_name: str, value: float) -> SimpleNamespace:
+    return SimpleNamespace(time=when, index_name=index_name, value=value)
+
+
+def test_indices_chart_floor_keeps_a_full_year_for_short_windows() -> None:
+    """A short UI window still surfaces ~12 months of monthly freight data."""
+    now = datetime.now(tz=UTC)
     rows = [
-        _dated_row(2026, 1, 1, "FRGEXPUSM649NCIS", 120.0),
-        _dated_row(2026, 4, 1, "FRGEXPUSM649NCIS", 130.0),
+        _instant_row(now - timedelta(days=300), "FRGEXPUSM649NCIS", 120.0),
+        _instant_row(now - timedelta(days=30), "FRGEXPUSM649NCIS", 130.0),
     ]
 
     session = cast(Any, _Session(rows))
-    chart = _build_indices_chart(session, datetime(2026, 5, 6, tzinfo=UTC))
+    # 30-day window — without the year floor only the recent point would show.
+    chart = _build_indices_chart(session, now - timedelta(days=30))
 
-    assert chart == [{"time": "2026-04-01", "fbx": 130.0}]
+    assert [c["fbx"] for c in chart] == [120.0, 130.0]
+
+
+def test_indices_chart_floor_excludes_data_older_than_a_year() -> None:
+    now = datetime.now(tz=UTC)
+    rows = [
+        _instant_row(now - timedelta(days=400), "FRGEXPUSM649NCIS", 120.0),
+        _instant_row(now - timedelta(days=30), "FRGEXPUSM649NCIS", 130.0),
+    ]
+
+    session = cast(Any, _Session(rows))
+    chart = _build_indices_chart(session, now - timedelta(days=30))
+
+    assert [c["fbx"] for c in chart] == [130.0]

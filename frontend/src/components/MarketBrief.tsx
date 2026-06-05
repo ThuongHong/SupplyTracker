@@ -131,7 +131,7 @@ export function MarketBrief({ window }: Props) {
       </Card>
 
       {/* Freight & bunker market */}
-      <Card title="Freight proxies & bunker">
+      <Card title="Macro Freight Indicators">
         <IndicesPanel indices={data.market.indices} bunker={data.market.bunker} />
       </Card>
     </section>
