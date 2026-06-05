@@ -7,10 +7,30 @@ from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.api.deps import AuthRequired, DbSession
 from app.collectors.portwatch import PortWatchCollector
+from app.config import get_settings
 from app.db.models import Chokepoint, Port
 from app.schemas.sync import EntitySyncResponse, SyncResponse
 
 logger = logging.getLogger(__name__)
+
+
+def _enforce_track_cap(db: DbSession, model: type, already_tracked: bool, cap: int) -> None:
+    """Reject a new track once the cap is hit (re-syncing a tracked entity is fine).
+
+    Caps bound free-tier storage/compute — each tracked entity adds ~90 days of
+    metrics plus daily scoring. Untrack one to free a slot.
+    """
+    if already_tracked:
+        return
+    tracked_count = db.query(model).filter(model.is_tracked.is_(True)).count()
+    if tracked_count >= cap:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Track limit reached ({tracked_count}/{cap}). "
+                "Untrack an entity before tracking a new one."
+            ),
+        )
 
 router = APIRouter(tags=["sync"])
 
@@ -226,6 +246,8 @@ def sync_port(_auth: AuthRequired, db: DbSession, portid: str) -> EntitySyncResp
     if port is None:
         raise HTTPException(status_code=404, detail=f"Unknown portid '{portid}'")
 
+    _enforce_track_cap(db, Port, port.is_tracked, get_settings().max_tracked_ports)
+
     result = PortWatchCollector().sync_port(db, port.portid, port.name)
     port.is_tracked = True
     db.commit()
@@ -251,6 +273,10 @@ def sync_chokepoint(
         raise HTTPException(
             status_code=404, detail=f"Unknown chokepointid '{chokepointid}'"
         )
+
+    _enforce_track_cap(
+        db, Chokepoint, cp.is_tracked, get_settings().max_tracked_chokepoints
+    )
 
     result = PortWatchCollector().sync_chokepoint(db, cp.chokepointid, cp.name)
     cp.is_tracked = True

@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     portwatch_base_url: HttpUrl
     portwatch_rate_limit_per_minute: int = 60
 
+    # Tracking caps — bound storage/compute on the free tier (each tracked
+    # entity adds ~90 days of metrics + daily scoring). See README capacity note.
+    max_tracked_ports: int = 10
+    max_tracked_chokepoints: int = 10
+
     # FRED
     fred_api_key: SecretStr = SecretStr("")
     fred_series: list[str] = []

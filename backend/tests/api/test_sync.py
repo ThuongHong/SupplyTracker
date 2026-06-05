@@ -90,6 +90,8 @@ class TestPerEntitySync:
         port.name = "Test Port"
         port.is_tracked = False
         mock_session.query.return_value.filter.return_value.first.return_value = port
+        # Under the track cap, so a new track is allowed.
+        mock_session.query.return_value.filter.return_value.count.return_value = 3
 
         with patch(
             "app.api.routes.sync.PortWatchCollector.sync_port",
@@ -105,6 +107,50 @@ class TestPerEntitySync:
         assert data["rows"] == 273
         assert data["is_tracked"] is True
         assert port.is_tracked is True  # flag flipped
+
+    def test_sync_new_port_rejected_when_cap_reached(self, mock_session, client):
+        """A not-yet-tracked port is refused with 409 once the cap is hit."""
+        port = MagicMock()
+        port.portid = "port1000"
+        port.name = "Test Port"
+        port.is_tracked = False
+        mock_session.query.return_value.filter.return_value.first.return_value = port
+        mock_session.query.return_value.filter.return_value.count.return_value = 10
+
+        with patch(
+            "app.api.routes.sync.PortWatchCollector.sync_port",
+        ) as sync_fn:
+            resp = client.post(
+                "/api/v1/sync/port/port1000",
+                headers={"Authorization": f"Bearer {VALID_TOKEN}"},
+            )
+
+        assert resp.status_code == 409
+        assert "limit" in resp.json()["detail"].lower()
+        sync_fn.assert_not_called()  # rejected before any data fetch
+        assert port.is_tracked is False
+
+    def test_resync_tracked_port_bypasses_cap(self, mock_session, client):
+        """Re-syncing an already-tracked port is allowed even at/over the cap."""
+        from app.collectors.base import CollectionResult
+
+        port = MagicMock()
+        port.portid = "port1000"
+        port.name = "Test Port"
+        port.is_tracked = True
+        mock_session.query.return_value.filter.return_value.first.return_value = port
+        mock_session.query.return_value.filter.return_value.count.return_value = 999
+
+        with patch(
+            "app.api.routes.sync.PortWatchCollector.sync_port",
+            return_value=CollectionResult(rows=10, errors=[]),
+        ):
+            resp = client.post(
+                "/api/v1/sync/port/port1000",
+                headers={"Authorization": f"Bearer {VALID_TOKEN}"},
+            )
+
+        assert resp.status_code == 200
 
     def test_sync_unknown_port_returns_404(self, mock_session, client):
         mock_session.query.return_value.filter.return_value.first.return_value = None
