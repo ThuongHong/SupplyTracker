@@ -26,10 +26,16 @@ export function IndicesPanel({ indices, bunker }: Props) {
     localStorage.setItem('indices_panel_collapsed', String(next))
   }
 
-  const firstFbx = indices.find(d => d.fbx != null)?.fbx ?? 1
-  const firstWci = indices.find(d => d.wci != null)?.wci ?? 1
+  // fbx (~3) and wci (~445) live on different scales, so rebase both to 100 at
+  // their first point to share one Y-axis. The origin values are noted below the
+  // chart so the absolute levels aren't lost.
+  const firstFbxPoint = indices.find(d => d.fbx != null)
+  const firstWciPoint = indices.find(d => d.wci != null)
+  const firstFbx = firstFbxPoint?.fbx ?? 1
+  const firstWci = firstWciPoint?.wci ?? 1
+  const originDate = (firstFbxPoint ?? firstWciPoint)?.time.slice(0, 10)
 
-  const rebasedData = indices.map(d => ({
+  const indexData = indices.map(d => ({
     label: d.time.slice(0, 10),
     value: 0,
     fbx: d.fbx != null ? (d.fbx / firstFbx) * 100 : (NaN as number),
@@ -58,7 +64,15 @@ export function IndicesPanel({ indices, bunker }: Props) {
 
       {!collapsed && (
         <div className="p-4 space-y-4 bg-[color:var(--card)]">
-          <AreaChart data={rebasedData} series={indexSeries} showLegend height={200} />
+          <AreaChart data={indexData} series={indexSeries} showLegend height={200} />
+          {(firstFbxPoint || firstWciPoint) && (
+            <p className="text-xs text-[color:var(--ink-4)]">
+              Rebased to 100{originDate ? ` at ${originDate}` : ''} · origin:
+              {firstFbxPoint ? ` freight ≈ ${firstFbx.toFixed(2)}` : ''}
+              {firstFbxPoint && firstWciPoint ? ',' : ''}
+              {firstWciPoint ? ` ocean ≈ ${firstWci.toFixed(2)}` : ''}
+            </p>
+          )}
           <div>
             <p className="text-xs text-[color:var(--ink-3)] mb-1">Bunker price</p>
             <AreaChart data={bunkerData} series={bunkerSeries} height={80} showLegend={false} />

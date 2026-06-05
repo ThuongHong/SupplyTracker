@@ -213,6 +213,10 @@ describe('IndicesPanel', () => {
     expect(screen.getByText('Ocean freight proxy (rebased)')).toBeDefined()
     expect(screen.queryByText('FBX (rebased)')).toBeNull()
     expect(screen.queryByText('WCI (rebased)')).toBeNull()
+    // Origin values are noted so the absolute levels aren't lost to rebasing.
+    expect(screen.getByText(/Rebased to 100/)).toBeDefined()
+    expect(screen.getByText(/freight ≈ 130\.00/)).toBeDefined()
+    expect(screen.getByText(/ocean ≈ 240\.00/)).toBeDefined()
   })
 })
 

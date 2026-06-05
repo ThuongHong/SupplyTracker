@@ -215,13 +215,11 @@ function ArteriesTable({ chokepoints, loading }: { chokepoints: ChokepointSummar
             <tr>
               <th>Chokepoint</th>
               <th>Status</th>
-              <th>Transit time</th>
               <th>Delta</th>
             </tr>
           </thead>
           <tbody>
             {chokepoints.slice(0, 8).map((cp) => {
-              const transit = cp.transit_time_hours ?? cp.transit_count
               const delta = cp.transit_delta_pct ?? (scoreOf(cp) - 50) / 5
               return (
                 <tr key={cp.id} onClick={() => navigate(`/chokepoints/${encodeURIComponent(cp.id)}`)}>
@@ -235,7 +233,6 @@ function ArteriesTable({ chokepoints, loading }: { chokepoints: ChokepointSummar
                       <SeverityBadge severity={cp.severity} />
                     </span>
                   </td>
-                  <td className="mono">{transit != null ? `${formatNumber(transit, 1)} h` : '-'}</td>
                   <td
                     className="mono"
                     style={{ color: delta > 0 ? 'var(--negative)' : 'var(--positive)' }}
@@ -270,7 +267,6 @@ function PortsDigest({ ports, loading }: { ports: PortSummary[]; loading: boolea
             <tr>
               <th>Port</th>
               <th>Vessels</th>
-              <th>Dwell</th>
               <th>Congestion</th>
               <th>Status</th>
             </tr>
@@ -285,7 +281,6 @@ function PortsDigest({ ports, loading }: { ports: PortSummary[]; loading: boolea
                     <p className="mt-1 text-xs text-[color:var(--ink-3)]">{port.country}</p>
                   </td>
                   <td className="mono">{formatNumber(port.vessel_count ?? score / 2, 0)}</td>
-                  <td className="mono">{port.dwell_time_hours != null ? `${formatNumber(port.dwell_time_hours, 1)} h` : '-'}</td>
                   <td>
                     <span className="bar-cell" aria-label={`Congestion ${formatNumber(score, 0)} percent`}>
                       <span style={{ width: `${score}%` }} />
@@ -449,7 +444,6 @@ export default function OverviewView() {
           <p className="label-cap">Evidence</p>
           <div className="mt-4 divide-y divide-[color:var(--rule-hair)]">
             {[
-              { label: 'FBX', value: freight ? formatNumber(freight.latest_value, 0) : '-', delta: freight ? formatPct(freight.change_pct_7d) : '-' },
               { label: 'Ports monitored', value: formatNumber(ports.length, 0), delta: `${congestedPorts} congested` },
               { label: 'Chokepoints', value: formatNumber(chokepoints.length, 0), delta: `${sortedChokepoints.slice(0, 3).length} lead watch` },
               { label: 'Open anomalies', value: formatNumber(anomalyCount, 0), delta: insightsLoading ? 'Loading' : 'High+ severity' },
