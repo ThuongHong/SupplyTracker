@@ -4,8 +4,7 @@ name: pipeline-cron
 # Hits the bearer-protected /api/v1/cron/run on the Render backend.
 on:
   schedule:
-    # Daily 05:00 UTC — collectors run, then score/forecast/narrate in order.
-    # GitHub may delay scheduled runs under load; daily cadence tolerates it.
+    # Daily 05:00 UTC. GitHub may delay scheduled runs under load; daily tolerates it.
     - cron: "0 5 * * *"
   workflow_dispatch:
     inputs:
@@ -21,24 +20,47 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger pipeline
+      - name: Warm up the sleeping Render instance
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+        run: |
+          # Render free spins down after 15 min idle (~30 s cold start). Poll the
+          # cheap health endpoint until it answers, so the heavy pipeline call
+          # below isn't the one paying the cold-start cost. Retry-safe: GET only.
+          for attempt in $(seq 1 15); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              --max-time 60 --connect-timeout 30 \
+              "${BACKEND_URL}/api/v1/health" || true)
+            echo "warmup ${attempt}: HTTP ${code:-none}"
+            [ "$code" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "::warning::backend did not warm up; running pipeline anyway"
+
+      - name: Run pipeline
         env:
           BACKEND_URL: ${{ vars.BACKEND_URL }}
           TOKEN: ${{ secrets.SYNC_BEARER_TOKEN }}
           JOBS: ${{ github.event.inputs.jobs || 'collect,score,forecast,narrate' }}
         run: |
-          # First call also warms the sleeping Render free instance; retry a few
-          # times so a cold start doesn't fail the run. --max-time covers the
-          # full inline pipeline (collectors + scoring can take a while).
-          for attempt in 1 2 3; do
+          # Each job is a SEPARATE one-shot call (no blind retry). A slow job
+          # therefore never re-triggers an earlier one — the old single-call +
+          # 3x retry could re-run `collect` from scratch on a forecast timeout.
+          # --max-time is generous because the whole pipeline runs inline in the
+          # web process on a single free-tier CPU.
+          fails=""
+          for job in $(echo "${JOBS}" | tr ',' ' '); do
+            echo "=== ${job} ==="
             code=$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
-              -X POST "${BACKEND_URL}/api/v1/cron/run?jobs=${JOBS}" \
+              -X POST "${BACKEND_URL}/api/v1/cron/run?jobs=${job}" \
               -H "Authorization: Bearer ${TOKEN}" \
-              --max-time 600 --connect-timeout 60) && \
-              [ "$code" = "200" ] && break
-            echo "attempt ${attempt}: HTTP ${code:-no-response}, retrying in 30s"
-            sleep 30
+              --max-time 1500 --connect-timeout 60 || true)
+            echo "HTTP ${code:-no-response}"
+            cat /tmp/body.txt 2>/dev/null || true
+            echo
+            [ "$code" = "200" ] || fails="${fails} ${job}"
           done
-          echo "HTTP ${code}"
-          cat /tmp/body.txt
-          [ "$code" = "200" ]
+          if [ -n "${fails}" ]; then
+            echo "::error::failed jobs:${fails}"
+            exit 1
+          fi
