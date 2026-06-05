@@ -58,6 +58,7 @@ def get_entity_dashboard(
 )
 def get_entity_summary(
     db: DbSession,
+    response: Response,
     entity_type: str = Path(..., description="Entity type: 'port' or 'chokepoint'"),
     entity_id: str = Path(..., description="Entity identifier (portid/locode for ports, slug for chokepoints)"),
     window: str = Query("30d", pattern="^(7d|30d|90d)$", description="Time window: 7d, 30d, or 90d"),
@@ -76,4 +77,10 @@ def get_entity_summary(
             status_code=404,
             detail=f"{entity_type.capitalize()} '{entity_id}' not found",
         )
+
+    # A forced regeneration must not be served from any cache; normal loads can
+    # be reused by the browser for 5 min (LLM text is also cached server-side).
+    response.headers["Cache-Control"] = (
+        "no-store" if force else "public, max-age=300"
+    )
     return result

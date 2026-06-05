@@ -258,7 +258,28 @@ class TestEntitySummary:
         assert data["narrative"]
         assert data["stats"]["anomaly_level"] == "high"
         assert data["stats"]["z_score"] == 8.0
+        # Normal load is browser-cacheable for 5 min.
+        assert resp.headers["cache-control"] == "public, max-age=300"
         mock_build.assert_called_once()
+
+    def test_summary_force_is_not_cached(self, mock_session, client):
+        summary = EntitySummaryResponse(
+            entity=EntityInfo(type="port", id="SGSIN", name="Singapore"),
+            window="30d",
+            narrative="Regenerated.",
+            what_happened="Regenerated.",
+            so_what="x",
+            to_do="y",
+            stats=AnomalyStats(metric="port_calls"),
+        )
+        with patch(
+            "app.api.routes.dashboard.build_entity_summary",
+            return_value=summary,
+        ):
+            resp = client.get("/api/v1/entities/port/SGSIN/summary?force=true")
+        assert resp.status_code == 200
+        # A forced regeneration must never be served from cache.
+        assert resp.headers["cache-control"] == "no-store"
 
     def test_summary_unknown_entity_404(self, mock_session, client):
         with patch(
