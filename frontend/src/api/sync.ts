@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import { clearBriefCache } from './brief'
 import type { SyncResponse } from './types'
 
 export function getSyncToken(): string | null {
@@ -46,5 +47,8 @@ function _post<T>(path: string): Promise<T> {
   return apiFetch<T>(path, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
+  }).then((result) => {
+    clearBriefCache()
+    return result
   })
 }

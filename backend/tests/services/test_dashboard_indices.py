@@ -12,6 +12,10 @@ class _Query:
         self._rows = rows
 
     def filter(self, *args: Any) -> _Query:
+        for expr in args:
+            threshold = getattr(getattr(expr, "right", None), "value", None)
+            if isinstance(threshold, datetime):
+                self._rows = [row for row in self._rows if row.time >= threshold]
         return self
 
     def order_by(self, *args: Any) -> _Query:
@@ -37,6 +41,16 @@ def _row(day: int, index_name: str, value: float) -> SimpleNamespace:
     )
 
 
+def _dated_row(
+    year: int, month: int, day: int, index_name: str, value: float
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        time=datetime(year, month, day, tzinfo=UTC),
+        index_name=index_name,
+        value=value,
+    )
+
+
 def test_indices_chart_maps_fred_freight_proxies_to_existing_series_keys() -> None:
     rows = [
         _row(1, "DCOILBRENTEU", 80.0),
@@ -53,3 +67,27 @@ def test_indices_chart_maps_fred_freight_proxies_to_existing_series_keys() -> No
         {"time": "2026-01-01", "fbx": 130.0, "wci": 240.0},
         {"time": "2026-01-02", "fbx": 91.0},
     ]
+
+
+def test_indices_chart_keeps_monthly_fred_proxy_data_for_short_windows() -> None:
+    rows = [
+        _dated_row(2026, 4, 1, "FRGEXPUSM649NCIS", 130.0),
+        _dated_row(2026, 4, 1, "PCU483111483111", 240.0),
+    ]
+
+    session = cast(Any, _Session(rows))
+    chart = _build_indices_chart(session, datetime(2026, 5, 6, tzinfo=UTC))
+
+    assert chart == [{"time": "2026-04-01", "fbx": 130.0, "wci": 240.0}]
+
+
+def test_indices_chart_excludes_fred_proxy_data_older_than_90d_lookback() -> None:
+    rows = [
+        _dated_row(2026, 1, 1, "FRGEXPUSM649NCIS", 120.0),
+        _dated_row(2026, 4, 1, "FRGEXPUSM649NCIS", 130.0),
+    ]
+
+    session = cast(Any, _Session(rows))
+    chart = _build_indices_chart(session, datetime(2026, 5, 6, tzinfo=UTC))
+
+    assert chart == [{"time": "2026-04-01", "fbx": 130.0}]

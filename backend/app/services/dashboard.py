@@ -43,6 +43,7 @@ _FRED_FREIGHT_PROXY_KEYS: dict[str, tuple[str, int]] = {
     "FRGSHPUSM649NCIS": ("fbx", 20),  # Cass Freight Index: shipments fallback
     "PCU483111483111": ("wci", 10),  # PPI: deep sea freight transportation
 }
+_FREIGHT_INDEX_EXTRA_LOOKBACK_DAYS = 90
 
 # PortWatch per-category port-call metrics → cargo-type label for the mix chart.
 _PORT_CATEGORY_METRICS: dict[str, str] = {
@@ -487,9 +488,12 @@ def _freight_chart_key(index_name: str) -> tuple[str, int] | None:
 
 def _build_indices_chart(session: Session, since: datetime) -> list[dict[str, Any]]:
     """Return pivoted freight-index series with fbx and wci-compatible keys."""
+    # FRED freight proxies are monthly and can lag daily PortWatch windows by
+    # more than 30 days, so the market chart needs a longer macro lookback.
+    query_since = since - timedelta(days=_FREIGHT_INDEX_EXTRA_LOOKBACK_DAYS)
     rows = (
         session.query(FreightIndex)
-        .filter(FreightIndex.time >= since)
+        .filter(FreightIndex.time >= query_since)
         .order_by(FreightIndex.time)
         .all()
     )
