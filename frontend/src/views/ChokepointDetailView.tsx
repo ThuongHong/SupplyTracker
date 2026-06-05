@@ -88,7 +88,10 @@ function BreakdownChart({
     fetchChokepointBreakdown(id)
       .then((bd) => {
         if (cancelled) return
-        const slice = bd.days.slice(-50)
+        // Backend returns days newest-first; plot oldest→newest so the timeline
+        // reads left-to-right (and the "Latest Transit" KPI uses the real latest).
+        const asc = [...bd.days].sort((a, b) => a.date.localeCompare(b.date))
+        const slice = asc.slice(-50)
         setDays(slice)
         if (slice.length && onLatestDay) onLatestDay(slice[slice.length - 1])
         setLoading(false)
