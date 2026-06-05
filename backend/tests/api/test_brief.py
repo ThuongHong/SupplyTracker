@@ -116,10 +116,10 @@ class TestBrief:
         assert "steady" in body["brief"].lower()
         assert body["as_of"]
 
-    def test_tracked_but_no_events_returns_steady_fallback(
+    def test_tracked_but_no_events_or_standing_risk_returns_steady_fallback(
         self, mock_session, client, monkeypatch
     ):
-        """Tracked entities exist but produced no events/insights => fallback, no LLM."""
+        """No events/insights AND no high/critical standing risk => fallback, no LLM."""
         monkeypatch.setattr(
             "app.api.routes.brief._tracked_entity_ids", lambda db: {"port1"}
         )
@@ -128,6 +128,8 @@ class TestBrief:
         insight_query = MagicMock()
         insight_query.order_by.return_value.limit.return_value.all.return_value = []
         mock_session.query.side_effect = [story_query, insight_query]
+        # No standing high/critical risk for tracked entities.
+        monkeypatch.setattr("app.api.routes.risk._get_latest_scores", lambda db: [])
 
         def _boom(*args, **kwargs):
             raise AssertionError("get_decision_brief must not run with empty data")
@@ -140,6 +142,45 @@ class TestBrief:
         body = resp.json()
         assert "steady" in body["brief"].lower()
         assert body["as_of"]
+
+    def test_standing_high_risk_drives_brief_when_no_events(
+        self, mock_session, client, monkeypatch
+    ):
+        """Quiet day but a tracked entity at high risk => LLM brief from standing posture."""
+        monkeypatch.setattr(
+            "app.api.routes.brief._tracked_entity_ids", lambda db: {"port1"}
+        )
+        story_query = MagicMock()
+        story_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+        insight_query = MagicMock()
+        insight_query.order_by.return_value.limit.return_value.all.return_value = []
+        mock_session.query.side_effect = [story_query, insight_query]
+
+        standing = MagicMock(entity_id="port1", severity="high")
+        untracked = MagicMock(entity_id="port999", severity="critical")
+        monkeypatch.setattr(
+            "app.api.routes.risk._get_latest_scores",
+            lambda db: [standing, untracked],
+        )
+
+        captured: dict = {}
+
+        def _fake_brief(db, redis_client, events, insights, standing_risks=None):
+            captured["events"] = events
+            captured["standing"] = standing_risks
+            return "Tracked port at high risk this session."
+
+        monkeypatch.setattr(
+            "app.api.routes.brief.get_decision_brief", _fake_brief
+        )
+
+        resp = client.get("/api/v1/brief")
+
+        assert resp.status_code == 200
+        assert "high risk" in resp.json()["brief"].lower()
+        # Only the tracked entity is passed; events list stays empty.
+        assert captured["events"] == []
+        assert [s.entity_id for s in captured["standing"]] == ["port1"]
 
     def test_chokepoint_slug_matches_event_entity_id(self):
         from app.api.routes.brief import _chokepoint_slug

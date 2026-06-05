@@ -19,7 +19,12 @@ _VALID_SOURCES = {"portwatch", "fred", "fbx", "wci", "bunker", "news", "catalog"
 # Jobs the /cron/run endpoint can run, in dependency order (collect → score →
 # forecast → narrate). Mirrors what celery-beat schedules, for workerless
 # deploys where an external cron drives the pipeline instead.
-_VALID_CRON_JOBS = ("collect", "score", "forecast", "narrate")
+#
+# "backfill" is a one-off: it scores every entity for each of the last ``days``
+# days so the risk-trend chart has history (normal scoring only writes today's
+# snapshot). It is NOT in the default jobs string — request it explicitly with
+# ?jobs=backfill — so a daily cron never re-runs the expensive sweep.
+_VALID_CRON_JOBS = ("backfill", "collect", "score", "forecast", "narrate")
 
 
 @router.post("/sync/{source}", response_model=SyncResponse)
@@ -67,12 +72,89 @@ def trigger_sync(
 # ── Cron driver (workerless deploys) ─────────────────────────────────────────
 
 
+def _run_backfill(days: int) -> dict[str, Any]:
+    """Score every entity for each of the last ``days`` days.
+
+    Normal scoring (`score.run_pipeline`) only writes a snapshot for *today*, so
+    the risk-trend chart starts life with a single point. This sweep replays the
+    scorer date-by-date — `score_entity` upserts `RiskFeatureSnapshot` keyed by
+    `(snapshot_date, entity_type, entity_id)` and baselines are point-in-time
+    (data ≤ as_of), so each historical day gets a valid snapshot.
+    """
+    from datetime import date, timedelta
+
+    from app.analysis.scoring import load_components, score_entity
+    from app.db.models import PortWatchMetric
+    from app.db.session import get_db
+
+    db_gen = get_db()
+    session = next(db_gen)
+    try:
+        components, _ = load_components()
+        entities = (
+            session.query(
+                PortWatchMetric.entity_type,
+                PortWatchMetric.entity_id,
+                PortWatchMetric.entity_name,
+            )
+            .distinct()
+            .all()
+        )
+
+        today = date.today()
+        start = today - timedelta(days=max(days - 1, 0))
+        snapshots = 0
+        errors = 0
+        day = start
+        while day <= today:
+            for entity_type, entity_id, entity_name in entities:
+                try:
+                    score_entity(
+                        session, entity_type, entity_id, entity_name, day, components
+                    )
+                    snapshots += 1
+                except Exception:
+                    logger.exception(
+                        "backfill score_entity failed for %s/%s on %s",
+                        entity_type,
+                        entity_id,
+                        day,
+                    )
+                    errors += 1
+            session.commit()  # commit per day to keep transactions short
+            day += timedelta(days=1)
+
+        return {
+            "days": days,
+            "entities": len(entities),
+            "snapshots_written": snapshots,
+            "errors": errors,
+        }
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        try:
+            next(db_gen)
+        except StopIteration:
+            pass
+
+
 @router.post("/cron/run")
 def cron_run(
     _auth: AuthRequired,
     jobs: str = Query(
         "collect,score,forecast,narrate",
-        description="Comma-separated subset of: collect, score, forecast, narrate",
+        description=(
+            "Comma-separated subset of: backfill, collect, score, forecast, "
+            "narrate. 'backfill' is a one-off historical risk-score sweep."
+        ),
+    ),
+    days: int = Query(
+        90,
+        ge=1,
+        le=365,
+        description="Lookback window (days) for the 'backfill' job.",
     ),
 ) -> dict[str, Any]:
     """Run the data pipeline synchronously — the workerless replacement for
@@ -106,7 +188,9 @@ def cron_run(
     results: dict[str, Any] = {}
     for job in ordered:
         try:
-            if job == "collect":
+            if job == "backfill":
+                results["backfill"] = _run_backfill(days)
+            elif job == "collect":
                 results["collect"] = {
                     name: task.apply().result
                     for name, task in (

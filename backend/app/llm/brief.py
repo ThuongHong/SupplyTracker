@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date
+from typing import Any
 
 import redis as redis_lib
 from sqlalchemy.orm import Session
@@ -16,11 +17,18 @@ from app.llm.prompts import DECISION_BRIEF_SYSTEM, build_messages
 # ---------------------------------------------------------------------------
 
 
-def _cache_key(top_events: list[RiskStoryEvent]) -> str:
+def _cache_key(
+    top_events: list[RiskStoryEvent], standing_risks: list[Any] | None = None
+) -> str:
     today = date.today().isoformat()
-    events_hash = hashlib.md5(
-        ":".join(sorted(str(e.event_key) for e in top_events)).encode()
-    ).hexdigest()[:8]
+    parts = sorted(str(e.event_key) for e in top_events)
+    # On a quiet (no-event) day the brief is driven by standing risk instead, so
+    # the cache must key off those entities/severities or every quiet day collides.
+    if standing_risks:
+        parts += sorted(
+            f"{s.entity_type}:{s.entity_id}:{s.severity}" for s in standing_risks
+        )
+    events_hash = hashlib.md5(":".join(parts).encode()).hexdigest()[:8]
     return f"brief:{today}:{events_hash}"
 
 
@@ -32,6 +40,7 @@ def _cache_key(top_events: list[RiskStoryEvent]) -> str:
 def _build_brief_prompt(
     top_events: list[RiskStoryEvent],
     top_insights: list[Insight],
+    standing_risks: list[Any] | None = None,
 ) -> str:
     lines: list[str] = ["Top risk events:"]
     for event in top_events:
@@ -43,6 +52,21 @@ def _build_brief_prompt(
     lines.append("\nTop insights:")
     for insight in top_insights:
         lines.append(f"  - [{insight.attention_level or 'N/A'}] {insight.title}: {insight.narrative}")
+
+    # Quiet day: no new events/insights, but some tracked entities are still
+    # sitting at high/critical risk. Brief the current posture so the executive
+    # summary reflects reality instead of a generic "steady" line.
+    if standing_risks:
+        lines.append(
+            "\nNo new risk events today. Current standing risk posture for "
+            "tracked entities (score 0–1):"
+        )
+        for s in standing_risks:
+            score = f"{s.score:.2f}" if s.score is not None else "n/a"
+            lines.append(
+                f"  - [{(s.severity or 'unknown').upper()}] {s.entity_name} "
+                f"({s.entity_type}): risk score {score}"
+            )
 
     lines.append("\nPlease generate a concise executive Decision Brief based on the above data.")
     return "\n".join(lines)
@@ -58,10 +82,15 @@ def get_decision_brief(
     redis_client: redis_lib.Redis,
     top_events: list[RiskStoryEvent],
     top_insights: list[Insight],
+    standing_risks: list[Any] | None = None,
 ) -> str:
-    """Return a cached or freshly generated Decision Brief string."""
+    """Return a cached or freshly generated Decision Brief string.
+
+    ``standing_risks`` is used on quiet days (no events/insights) to brief the
+    current high/critical risk posture instead of a generic steady line.
+    """
     settings = get_settings()
-    cache_key = _cache_key(top_events)
+    cache_key = _cache_key(top_events, standing_risks)
 
     # Cache hit
     cached = redis_client.get(cache_key)
@@ -71,7 +100,7 @@ def get_decision_brief(
         return str(cached)
 
     # Cache miss — generate
-    user_prompt = _build_brief_prompt(top_events, top_insights)
+    user_prompt = _build_brief_prompt(top_events, top_insights, standing_risks)
     messages = build_messages(DECISION_BRIEF_SYSTEM, user_prompt)
 
     response: LLMResponse = chat_completion(messages, stream=False)  # type: ignore[assignment]

@@ -81,7 +81,20 @@ def get_brief(db: DbSession, redis_client: RedisClient) -> BriefResponse:
     ]
 
     if not top_events and not top_insights:
-        return BriefResponse(brief=_STEADY_BRIEF, as_of=today)
+        # Quiet day: no transition events. Brief the standing risk posture so a
+        # tracked entity sitting at high/critical still headlines a real brief
+        # instead of the generic steady line.
+        from app.api.routes.risk import _get_latest_scores
+
+        standing = [
+            s
+            for s in _get_latest_scores(db)
+            if s.entity_id in tracked and s.severity in {"high", "critical"}
+        ][:_MAX_EVENTS]
+        if not standing:
+            return BriefResponse(brief=_STEADY_BRIEF, as_of=today)
+        brief = get_decision_brief(db, redis_client, [], [], standing_risks=standing)
+        return BriefResponse(brief=brief, as_of=today)
 
     brief = get_decision_brief(db, redis_client, top_events, top_insights)
     return BriefResponse(brief=brief, as_of=today)
