@@ -13,6 +13,12 @@ from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
+# Only the throughput metric is charted as a forecast (see the dashboard's
+# forecast_key filters). Fitting AutoETS for every metric (~8 per entity) is
+# wasted CPU/memory and is what pushed the free-tier `forecast` job past the
+# cron timeout, so restrict the pass to the one metric per entity type.
+_FORECAST_METRICS: dict[str, str] = {"port": "port_calls", "chokepoint": "transit_calls"}
+
 
 @celery_app.task(name="forecast.run_forecast", bind=True, max_retries=1, default_retry_delay=600)
 def run_forecast(self: Any) -> dict[str, Any]:
@@ -32,9 +38,11 @@ def run_forecast(self: Any) -> dict[str, Any]:
     errors = 0
 
     try:
-        # Discover all distinct entity + metric combinations
-        combinations = (
-            session.query(
+        # Discover all distinct entity + metric combinations, then keep only the
+        # charted throughput metric per entity type (skip the unused rest).
+        combinations = [
+            row
+            for row in session.query(
                 PortWatchMetric.entity_type,
                 PortWatchMetric.entity_id,
                 PortWatchMetric.entity_name,
@@ -42,10 +50,11 @@ def run_forecast(self: Any) -> dict[str, Any]:
             )
             .distinct()
             .all()
-        )
+            if row.metric_name == _FORECAST_METRICS.get(row.entity_type)
+        ]
 
         logger.info(
-            "forecast.run_forecast: found %d entity-metric combinations",
+            "forecast.run_forecast: forecasting %d throughput series",
             len(combinations),
         )
 
