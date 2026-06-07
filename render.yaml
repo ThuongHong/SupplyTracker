@@ -30,6 +30,23 @@ services:
       # Workerless: tasks run inline in the web process; external cron drives them.
       - key: CELERY_TASK_ALWAYS_EAGER
         value: "true"
+      # ── Single-CPU thread pinning (REQUIRED on free tier) ───────────────
+      # The forecast job imports statsforecast → numba + OpenBLAS, which size
+      # their thread pools from the HOST core count. On a ~0.1-CPU free
+      # container that oversubscription makes the first AutoETS fit hang for
+      # minutes until Render SIGTERMs the instance, so the forecast cron call
+      # never returns. Pin every pool to 1 thread (must be set as env, before
+      # numpy/numba import). See the `forecast` hang post-mortem.
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: NUMBA_NUM_THREADS
+        value: "1"
+      - key: VECLIB_MAXIMUM_THREADS
+        value: "1"
       # ── Required infra (set in dashboard) ───────────────────────────────
       # Supabase/Neon connection string. Driver MUST be postgresql+psycopg, e.g.
       #   postgresql+psycopg://USER:PASS@HOST:5432/postgres?sslmode=require
